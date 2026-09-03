@@ -1,0 +1,22 @@
+name: provision
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "examples/**"
+
+jobs:
+  terraform:
+    strategy:
+      matrix:
+        include:
+          # um item por projeto/pasta em examples/ — copie a linha pra adicionar outro
+          - name: github-actions-wif
+            working_directory: examples/github-actions-wif
+            environment: estudos-jean-pereira
+    uses: ./.github/workflows/terraform-apply.yml
+    with:
+      working_directory: ${{ matrix.working_directory }}
+    secrets: inherit
+    environment: ${{ matrix.environment }}

@@ -31,6 +31,12 @@ variable "db_admin_password" {
   description = "Senha do usuário master 'postgres' para execução dos privilégios internos"
 }
 
+variable "iam_database_users" {
+  type        = list(string)
+  default     = []
+  description = "Service accounts do GCP que devem virar usuarios do banco autenticados via IAM (CLOUD_IAM_SERVICE_ACCOUNT). O Cloud SQL exige o formato SEM o sufixo \".gserviceaccount.com\", ex: [\"github-deployer@projeto.iam\"] (nao \"...@projeto.iam.gserviceaccount.com\"). A service account precisa ja existir no projeto antes do apply."
+}
+
 variable "authorized_networks" {
   type = list(object({
     name  = string

@@ -14,4 +14,7 @@ module "banco_teste" {
       value = "179.48.89.219/32" # Ex: 177.100.200.50/32
     }
   ]
+
+  # A SA precisa ja existir no projeto (ex: criada pelo modulo workload-identity)
+  iam_database_users = ["github-deployer@estudos-jean-pereira.iam"]
 }

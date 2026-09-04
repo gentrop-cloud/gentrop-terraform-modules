@@ -61,17 +61,11 @@ resource "time_sleep" "wait_for_gcp_roles" {
 }
 
 # 5. Contas de Serviço registradas como usuários de Banco com Autenticação IAM
-resource "google_sql_user" "github_deployer" {
-  # O Terraform vai trocar ${var.project_id} pelo projeto que o desenvolvedor passar
-  name     = "github-deployer@${var.project_id}.iam"
-  
-  instance = google_sql_database_instance.postgres.name
-  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
-}
+resource "google_sql_user" "iam_users" {
+  for_each = toset(var.iam_database_users)
 
-resource "google_sql_user" "app_dev" {
-  name     = "hyper-challenge-app-dev@${var.project_id}.iam"
-  
+  name     = each.value
+  project  = var.project_id
   instance = google_sql_database_instance.postgres.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }

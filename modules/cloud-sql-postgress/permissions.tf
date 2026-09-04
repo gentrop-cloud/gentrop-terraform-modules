@@ -9,10 +9,7 @@ provider "postgresql" {
 }
 
 locals {
-  roles_iam = [
-    google_sql_user.github_deployer.name,
-    google_sql_user.app_dev.name
-  ]
+  roles_iam = [for u in google_sql_user.iam_users : u.name]
 }
 
 # Conexão e permissão de Schema (Usage/Create)

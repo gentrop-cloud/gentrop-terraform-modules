@@ -49,3 +49,22 @@ fazer deploy de novas imagens (via `gcloud run deploy` ou API) sem o Terraform
 reverter para a imagem antiga na próxima vez que rodar. Por outro lado, mudar
 `env_vars`/`secret_env_vars` e rodar `terraform apply` cria uma nova revision
 usando a imagem atual — não depende do step de CD para isso.
+
+## Invocação autenticada (OIDC)
+
+Além de `allow_unauthenticated` (acesso público via `allUsers`), passe
+`invoker_members` para conceder `roles/run.invoker` a chamadores específicos
+autenticados via OIDC — por exemplo a service account de um job do
+`cloud-scheduler-http` ou de uma fila do `cloud-tasks-queue`:
+
+```hcl
+invoker_members = [
+  "serviceAccount:${module.disparo_10h.service_account_email}",
+]
+```
+
+Para tarefas do Cloud Tasks: a service account usada no OIDC token de cada
+task é definida pela aplicação no momento de criar a task (não é uma
+propriedade da fila em si) — normalmente a mesma runtime SA do serviço que
+enfileira. Adicione essa SA em `invoker_members` do Cloud Run que consome a
+fila.

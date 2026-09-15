@@ -1,5 +1,6 @@
 locals {
   service_account_email = var.create_service_account ? google_service_account.this[0].email : var.existing_service_account_email
+  invoker_members       = concat(var.allow_unauthenticated ? ["allUsers"] : [], var.invoker_members)
 }
 
 resource "google_project_service" "this" {
@@ -98,12 +99,12 @@ resource "google_cloud_run_v2_service" "this" {
   depends_on = [google_project_service.this]
 }
 
-resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  count = var.allow_unauthenticated ? 1 : 0
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
+  for_each = toset(local.invoker_members)
 
   project  = var.project_id
   location = var.location
   name     = google_cloud_run_v2_service.this.name
   role     = "roles/run.invoker"
-  member   = "allUsers"
+  member   = each.value
 }

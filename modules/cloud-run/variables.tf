@@ -56,6 +56,12 @@ variable "allow_unauthenticated" {
   default     = true
 }
 
+variable "invoker_members" {
+  description = "Additional IAM members (e.g. \"serviceAccount:x@y.iam.gserviceaccount.com\") granted roles/run.invoker, for OIDC-authenticated callers like Cloud Scheduler or Cloud Tasks."
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_apis" {
   description = "Enable the Cloud Run API."
   type        = bool

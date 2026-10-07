@@ -1,6 +1,6 @@
 output "reasoning_engine_name" {
-  description = "Full resource name (projects/PROJECT/locations/REGION/reasoningEngines/ID)."
-  value       = google_vertex_ai_reasoning_engine.this.name
+  description = "Full resource name (projects/PROJECT/locations/REGION/reasoningEngines/ID); null while create_reasoning_engine is false."
+  value       = one(google_vertex_ai_reasoning_engine.this[*].name)
 }
 
 output "service_account_email" {

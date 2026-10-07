@@ -44,5 +44,5 @@ output "db_instance_connection_name" {
 }
 
 output "cloud_build_trigger" {
-  value = google_cloudbuild_trigger.deploy_app.name
+  value = one(google_cloudbuild_trigger.deploy_app[*].name)
 }

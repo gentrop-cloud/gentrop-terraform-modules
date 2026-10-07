@@ -13,7 +13,7 @@ variable "state_bucket" {
 variable "client_project_ids" {
   description = "Projetos de clientes que o portal pode provisionar. Adicione um projeto aqui no onboarding do cliente."
   type        = list(string)
-  default     = []
+  default     = ["estudos-jean-pereira"]
 }
 
 variable "portal_service_account_email" {

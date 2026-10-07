@@ -13,6 +13,7 @@ resource "google_firestore_database" "this" {
   type        = "FIRESTORE_NATIVE"
 
   delete_protection_state           = var.delete_protection_state
+  deletion_policy                   = var.deletion_policy
   point_in_time_recovery_enablement = var.point_in_time_recovery_enablement
 
   depends_on = [google_project_service.this]

@@ -56,16 +56,26 @@ variable "allow_sql_deletion" {
   default     = false
 }
 
-# --- constantes da org, vindas das vars do repo pelo provision.yml -------------
+# --- Cloud Build (desligado ate o fluxo de deploy ser definido) ---------------
+
+variable "enable_cloud_build" {
+  description = "Cria a conexao com o GitHub e o trigger de deploy do app. Exige as duas variaveis abaixo."
+  type        = bool
+  default     = false
+}
 
 variable "github_app_installation_id" {
   description = "ID da instalacao do app \"Google Cloud Build\" na org do GitHub (TF_VAR via var CLOUDBUILD_GITHUB_INSTALLATION_ID do repo)"
-  type        = number
+  # string, e nao number: o provision.yml sempre exporta o TF_VAR, vazio quando a
+  # var do repo nao existe, e um number vazio quebra o plan.
+  type    = string
+  default = ""
 }
 
 variable "github_token_secret" {
   description = "Secret com o PAT classico (repo, read:user, read:org) da conexao do Cloud Build, ex.: projects/<controle>/secrets/cloudbuild-github-token (TF_VAR via var CLOUDBUILD_GITHUB_TOKEN_SECRET do repo)"
   type        = string
+  default     = ""
 }
 
 # --- fixos por enquanto ---------------------------------------------------------

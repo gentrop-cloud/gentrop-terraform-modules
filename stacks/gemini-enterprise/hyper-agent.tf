@@ -98,7 +98,9 @@ module "fila_disparos" {
   project_id = var.project_id
   location   = var.region
 
-  name                      = "fila-disparos-hyperproject"
+  # Sufixo: o Cloud Tasks reserva o nome de uma fila apagada por ate 7 dias, e um
+  # destroy seguido de novo apply falharia. O gatilho le o nome via QUEUE_NAME.
+  name                      = "fila-disparos-hyperproject-${random_id.db_suffix.hex}"
   max_dispatches_per_second = 1
   max_concurrent_dispatches = 1
 

@@ -72,3 +72,9 @@ variable "service_account_roles" {
   type        = list(string)
   default     = []
 }
+
+variable "create_reasoning_engine" {
+  description = "Create the reasoning engine. Set false until the app CI has uploaded the bundle to the staging bucket, which is created either way."
+  type        = bool
+  default     = true
+}

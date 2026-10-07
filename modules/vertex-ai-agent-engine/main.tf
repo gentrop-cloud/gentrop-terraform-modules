@@ -36,6 +36,10 @@ resource "google_storage_bucket" "staging" {
 }
 
 resource "google_vertex_ai_reasoning_engine" "this" {
+  # Desligado no primeiro apply: o bucket de staging precisa existir antes, pro CI
+  # da aplicacao subir o bundle que o Vertex AI valida na criacao do recurso.
+  count = var.create_reasoning_engine ? 1 : 0
+
   project      = var.project_id
   region       = var.region
   display_name = var.display_name

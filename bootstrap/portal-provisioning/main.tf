@@ -49,6 +49,20 @@ locals {
   } }
 }
 
+# As credenciais da tf-provisioner usam o projeto de controle como projeto de
+# cota. Sem estas APIs aqui, chamadas em projetos de clientes falham com 403
+# "API has not been used in project <controle>" (ex.: IAM de projeto).
+resource "google_project_service" "control" {
+  for_each = toset([
+    "cloudresourcemanager.googleapis.com",
+    "serviceusage.googleapis.com",
+  ])
+
+  project            = var.control_project_id
+  service            = each.value
+  disable_on_destroy = false
+}
+
 # Pool e SA proprios: nao reaproveita o github-actions-pool / github-deployer do
 # examples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
 module "wif" {

@@ -53,6 +53,13 @@ concurrency:
   group: tf-${{ inputs.client_slug }}-${{ inputs.stack }}
   cancel-in-progress: false
 
+# Sem `shell: bash` explicito o GitHub roda `bash -e` SEM pipefail: um
+# `terraform apply | tee` que falha termina com o codigo do tee (0) e o run e
+# reportado ao portal como sucesso.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   terraform:
     runs-on: ubuntu-latest

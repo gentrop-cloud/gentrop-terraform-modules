@@ -50,6 +50,11 @@ resource "google_sql_user" "postgres_admin" {
   instance = google_sql_database_instance.postgres.name
   project  = var.project_id
   password = var.db_admin_password
+
+  # Postgres nao deixa remover um role que ainda e dono de objetos ("role postgres
+  # cannot be dropped because some objects depend on it"). Apagar a instancia ja
+  # remove todos os usuarios.
+  deletion_policy = "ABANDON"
 }
 
 # 4. Pausa estratégica de 60 segundos
@@ -70,6 +75,8 @@ resource "google_sql_user" "iam_users" {
   project  = var.project_id
   instance = google_sql_database_instance.postgres.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+
+  deletion_policy = "ABANDON"
 
   # Os GRANTs (permissions.tf) dependem destes usuarios e conectam como postgres.
   # Sem esperar a senha do postgres e a pausa acima, o provider conectava antes

@@ -32,3 +32,9 @@ variable "enable_apis" {
   type        = bool
   default     = true
 }
+
+variable "deletion_policy" {
+  description = "ABANDON (provider default) only removes the database from the state on destroy; DELETE deletes it. DELETE also needs delete_protection_state = DELETE_PROTECTION_DISABLED."
+  type        = string
+  default     = "ABANDON"
+}

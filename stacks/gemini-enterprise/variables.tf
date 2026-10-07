@@ -51,7 +51,7 @@ variable "enable_agent_engine" {
 }
 
 variable "allow_sql_deletion" {
-  description = "Desliga a protecao de exclusao do Cloud SQL. Aplique com true antes de um destroy."
+  description = "Desliga a protecao de exclusao dos bancos (Cloud SQL e Firestore). Aplique com true antes de um destroy."
   type        = bool
   default     = false
 }

@@ -1,0 +1,144 @@
+# Disparado pelo geapp-portal (GitHub App, workflow_dispatch). Roda um stack de
+# stacks/ para um cliente, com state em gs://$TF_STATE_BUCKET/clientes/<slug>/<stack>,
+# e reporta log e resultado ao portal com o token OIDC deste run.
+#
+# Runbook
+# - "Error acquiring the state lock": um run anterior morreu segurando o lock.
+#   Confira que nenhum run do mesmo cliente/stack esta ativo e rode, na pasta do
+#   stack, com as mesmas -backend-config: terraform force-unlock <LOCK_ID>
+# - O log nao aparece no portal e o run fica "Na fila": PORTAL_URL (var do repo)
+#   precisa ser a URL publica do portal, igual ao audience que ele espera.
+# - "PERMISSION_DENIED" no projeto do cliente: o projeto nao esta em
+#   client_project_ids do bootstrap/portal-provisioning.
+#
+# Vars do repositorio: WIF_PROVIDER, TF_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL.
+name: provision
+run-name: ${{ inputs.action }} ${{ inputs.stack }} · ${{ inputs.client_slug }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID do run no portal"
+        required: true
+        type: string
+      client_slug:
+        description: "Slug do cliente"
+        required: true
+        type: string
+      project_id:
+        description: "Projeto GCP do cliente"
+        required: true
+        type: string
+      stack:
+        description: "Pasta em stacks/"
+        required: true
+        type: string
+      action:
+        description: "plan ou apply"
+        required: true
+        type: choice
+        options: [plan, apply]
+      tfvars_json:
+        description: "Variaveis nao secretas do stack, em JSON"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# Um run por cliente/stack por vez; o seguinte espera (ADR 0004 do geapp-portal).
+concurrency:
+  group: tf-${{ inputs.client_slug }}-${{ inputs.stack }}
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Inputs entram so por env, nunca interpolados no script: evita injecao de comando.
+      RUN_ID: ${{ inputs.run_id }}
+      CLIENT_SLUG: ${{ inputs.client_slug }}
+      PROJECT_ID: ${{ inputs.project_id }}
+      STACK: ${{ inputs.stack }}
+      ACTION: ${{ inputs.action }}
+      TFVARS_JSON: ${{ inputs.tfvars_json }}
+      PORTAL_URL: ${{ vars.PORTAL_URL }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_IN_AUTOMATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar inputs
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "run_id invalido"; exit 1; }
+          [[ "$CLIENT_SLUG" =~ ^[a-z][a-z0-9-]{1,38}[a-z0-9]$ ]] || { echo "client_slug invalido"; exit 1; }
+          [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || { echo "project_id invalido"; exit 1; }
+          [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
+          # O portal manda project_id e client_slug tambem dentro do JSON: os dois tem que bater.
+          echo "$TFVARS_JSON" | jq -e --arg p "$PROJECT_ID" --arg s "$CLIENT_SLUG" \
+            'type == "object" and .project_id == $p and .client_slug == $s' >/dev/null \
+            || { echo "tfvars_json invalido ou divergente dos inputs"; exit 1; }
+          echo "$TFVARS_JSON" > "stacks/$STACK/portal.auto.tfvars.json"
+          echo "LOG=$RUNNER_TEMP/terraform.log" >> "$GITHUB_ENV"
+          touch "$RUNNER_TEMP/terraform.log"
+
+      - name: Iniciar envio de log ao portal
+        run: |
+          nohup bash scripts/portal-log-stream.sh "$LOG" >/dev/null 2>&1 &
+          echo $! > "$LOG.pid"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.TF_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false # o wrapper polui a saida de `terraform output -json`
+
+      - name: terraform init
+        working-directory: stacks/${{ inputs.stack }}
+        run: |
+          terraform init -input=false -no-color \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="prefix=clientes/$CLIENT_SLUG/$STACK" 2>&1 | tee -a "$LOG"
+
+      - name: terraform plan
+        working-directory: stacks/${{ inputs.stack }}
+        run: terraform plan -input=false -no-color -out=tfplan 2>&1 | tee -a "$LOG"
+
+      - name: terraform apply
+        if: inputs.action == 'apply'
+        working-directory: stacks/${{ inputs.stack }}
+        run: |
+          terraform apply -input=false -no-color tfplan 2>&1 | tee -a "$LOG"
+          terraform output -json > "$RUNNER_TEMP/outputs.json"
+
+      - name: Reportar resultado ao portal
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          # Para o envio de log e espera o ultimo lote sair (ate 60s).
+          touch "$LOG.done"
+          pid=$(cat "$LOG.pid" 2>/dev/null || echo "")
+          for _ in $(seq 60); do { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; } || break; sleep 1; done
+
+          case "$JOB_STATUS" in
+            success) status=succeeded ;;
+            cancelled) status=cancelled ;;
+            *) status=failed ;;
+          esac
+          outputs="$RUNNER_TEMP/outputs.json"
+          [ -s "$outputs" ] || echo '{}' > "$outputs"
+
+          token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$PORTAL_URL" | jq -r .value)
+          # O portal guarda so os outputs com sensitive=false.
+          jq -n --arg status "$status" --slurpfile outputs "$outputs" '{status: $status, outputs: $outputs[0]}' |
+            curl -sSf --retry 5 --retry-all-errors -o /dev/null -X POST \
+              -H "Authorization: Bearer $token" -H 'content-type: application/json' \
+              --data-binary @- "$PORTAL_URL/api/provisioning/runs/$RUN_ID/complete"

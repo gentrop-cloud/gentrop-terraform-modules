@@ -32,6 +32,11 @@ module "firestore" {
 
   database_id = local.firestore_database_id
   location_id = var.region
+
+  # Mesma chave do Cloud SQL: protegido por padrao; com allow_sql_deletion um
+  # destroy apaga o banco de verdade (o default do provider so o esquece no state).
+  delete_protection_state = var.allow_sql_deletion ? "DELETE_PROTECTION_DISABLED" : "DELETE_PROTECTION_ENABLED"
+  deletion_policy         = var.allow_sql_deletion ? "DELETE" : "ABANDON"
 }
 
 module "auditoria" {

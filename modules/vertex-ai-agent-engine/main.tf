@@ -62,3 +62,9 @@ resource "google_vertex_ai_reasoning_engine" "this" {
 
   depends_on = [google_project_service.this, google_project_iam_member.sa_roles]
 }
+
+# Estados aplicados antes do count acima: evita recriar o Agent Engine.
+moved {
+  from = google_vertex_ai_reasoning_engine.this
+  to   = google_vertex_ai_reasoning_engine.this[0]
+}

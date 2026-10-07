@@ -70,4 +70,9 @@ resource "google_sql_user" "iam_users" {
   project  = var.project_id
   instance = google_sql_database_instance.postgres.name
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+
+  # Os GRANTs (permissions.tf) dependem destes usuarios e conectam como postgres.
+  # Sem esperar a senha do postgres e a pausa acima, o provider conectava antes
+  # da senha valer: "password authentication failed for user postgres".
+  depends_on = [time_sleep.wait_for_gcp_roles]
 }

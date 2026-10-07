@@ -1,5 +1,9 @@
+# Com use_cloudsql_connector, o provider conecta pelo Cloud SQL connector
+# (scheme gcppostgres) usando as credenciais do GCP de quem roda o apply: nao
+# precisa liberar o IP do runner em authorized_networks.
 provider "postgresql" {
-  host            = google_sql_database_instance.postgres.public_ip_address
+  scheme          = var.use_cloudsql_connector ? "gcppostgres" : "postgres"
+  host            = var.use_cloudsql_connector ? google_sql_database_instance.postgres.connection_name : google_sql_database_instance.postgres.public_ip_address
   port            = 5432
   database        = google_sql_database.db.name
   username        = "postgres"

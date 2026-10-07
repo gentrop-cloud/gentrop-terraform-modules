@@ -1,47 +1,5 @@
-# Stack do gentrop-cloud/hyper-agent aplicado pelo geapp-portal (provision.yml),
-# um state por cliente. Base: clientes/geapp-prod-hyper-agent, parametrizado.
-#
-# Diferencas em relacao ao root manual:
-# - Sem module.secrets nem versao de SMTP_PASSWORD: o portal grava o valor no
-#   Secret Manager do cliente e passa so o nome em secret_env_vars.
-# - Sem WIF para o GitHub Actions do hyper-agent: o deploy nos clientes vai
-#   ser feito pelo Cloud Build (fluxo em desenho).
-# - Agent Engine em duas fases (enable_agent_engine), porque o Vertex AI exige
-#   o bundle no bucket de staging na hora de criar o recurso.
-# - Cloud Scheduler envia o body {"tipo_gatilho": ...} que o gatilho exige.
-
-variable "project_id" {
-  description = "Projeto GCP do cliente"
-  type        = string
-}
-
-variable "client_slug" {
-  description = "Slug do cliente no portal (o portal sempre envia; os recursos daqui tem nome fixo, um hyper-agent por projeto)"
-  type        = string
-}
-
-variable "region" {
-  type    = string
-  default = "us-central1"
-}
-
-variable "secret_env_vars" {
-  description = "Env var do Cloud Run de mensagens => id do secret no Secret Manager do cliente (ex.: SMTP_PASSWORD)"
-  type        = map(string)
-  default     = {}
-}
-
-variable "enable_agent_engine" {
-  description = "false no primeiro apply. Depois que o CI do hyper-agent subir agent.pkl e requirements.txt no bucket de staging, aplique de novo com true."
-  type        = bool
-  default     = false
-}
-
-variable "smtp_email" {
-  description = "Remetente do fallback de e-mail"
-  type        = string
-  default     = "automacao@gentrop.com"
-}
+# hyper-agent: Agent Engine, Firestore, BigQuery, Cloud Tasks, Scheduler e os
+# 2 Cloud Run. Base: clientes/geapp-prod-hyper-agent, parametrizado.
 
 locals {
   firestore_database_id = "hyper-project-db-native"
@@ -113,7 +71,7 @@ module "mensagens_chat" {
   service_account_id = "hyper-agent-mensagens-chat"
   service_account_roles = concat(
     ["roles/datastore.user", "roles/bigquery.dataEditor", "roles/aiplatform.user"],
-    length(var.secret_env_vars) > 0 ? ["roles/secretmanager.secretAccessor"] : [],
+    contains(keys(var.secret_env_vars), "SMTP_PASSWORD") ? ["roles/secretmanager.secretAccessor"] : [],
   )
 
   allow_unauthenticated = true
@@ -128,7 +86,8 @@ module "mensagens_chat" {
     # REASONING_ENGINE_ID e obrigatorio no codigo: so existe com o Agent Engine ligado.
     var.enable_agent_engine ? { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name } : {},
   )
-  secret_env_vars = var.secret_env_vars
+  # So os secrets que este servico le; os do app GE ficam fora.
+  secret_env_vars = { for k, v in var.secret_env_vars : k => v if k == "SMTP_PASSWORD" }
 
   depends_on = [module.firestore]
 }
@@ -204,32 +163,4 @@ module "disparo_verificacao" {
   body               = jsonencode({ tipo_gatilho = "verificacao" })
   headers            = { "Content-Type" = "application/json" }
   service_account_id = "hyper-agent-disparo-14h"
-}
-
-output "mensagens_chat_url" {
-  value = module.mensagens_chat.service_url
-}
-
-output "gatilho_scheduler_url" {
-  value = module.gatilho_scheduler.service_url
-}
-
-output "artifact_registry_url" {
-  value = module.registry.repository_url
-}
-
-output "agent_engine_staging_bucket" {
-  value = "gs://${module.agent_engine.staging_bucket_name}"
-}
-
-output "reasoning_engine_name" {
-  value = module.agent_engine.reasoning_engine_name
-}
-
-output "firestore_database" {
-  value = module.firestore.name
-}
-
-output "bigquery_dataset" {
-  value = module.auditoria.dataset_id
 }

@@ -12,3 +12,7 @@ output "database_name" {
   value       = google_sql_database.db.name
   description = "Nome do banco de dados lógico provisionado"
 }
+output "instance_name" {
+  value       = google_sql_database_instance.postgres.name
+  description = "Nome da instancia"
+}

@@ -7,6 +7,8 @@ resource "google_sql_database_instance" "postgres" {
   region           = var.region
   project          = var.project_id
 
+  deletion_protection = var.deletion_protection
+
   # Garante que as APIs em services.tf estejam ativas antes de tentar criar a instância
   depends_on = [google_project_service.gcp_services]
 

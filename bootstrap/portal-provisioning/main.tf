@@ -13,7 +13,7 @@ variable "state_bucket" {
 variable "client_project_ids" {
   description = "Projetos de clientes que o portal pode provisionar. Adicione um projeto aqui no onboarding do cliente."
   type        = list(string)
-  default     = ["estudos-jean-pereira"]
+  default     = []
 }
 
 variable "portal_service_account_email" {
@@ -34,13 +34,16 @@ locals {
     "roles/resourcemanager.projectIamAdmin", # papeis das SAs de runtime
     "roles/run.admin",
     "roles/artifactregistry.admin",
-    "roles/secretmanager.viewer", # o stack so referencia secrets que o portal criou
-    "roles/datastore.owner",      # hyper-agent: Firestore
-    "roles/bigquery.admin",       # hyper-agent: dataset de auditoria
-    "roles/cloudtasks.admin",     # hyper-agent
-    "roles/cloudscheduler.admin", # hyper-agent
-    "roles/aiplatform.admin",     # hyper-agent: Agent Engine
-    "roles/storage.admin",        # hyper-agent: bucket de staging
+    "roles/secretmanager.viewer",       # o stack so referencia secrets que o portal criou
+    "roles/datastore.owner",            # hyper-agent: Firestore
+    "roles/bigquery.admin",             # hyper-agent: dataset de auditoria
+    "roles/cloudtasks.admin",           # hyper-agent
+    "roles/cloudscheduler.admin",       # hyper-agent
+    "roles/aiplatform.admin",           # hyper-agent: Agent Engine
+    "roles/storage.admin",              # hyper-agent: bucket de staging
+    "roles/cloudsql.admin",             # app: instancia e GRANTs pelo Cloud SQL connector
+    "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub
+    "roles/cloudbuild.builds.editor",   # app: trigger de deploy
   ]
 
   tf_bindings = { for pair in setproduct(var.client_project_ids, local.tf_client_roles) : "${pair[0]}/${pair[1]}" => {
@@ -56,6 +59,9 @@ resource "google_project_service" "control" {
   for_each = toset([
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com",
+    "secretmanager.googleapis.com",
+    "cloudbuild.googleapis.com", # projeto de cota das chamadas da API do Cloud Build nos clientes
+    "sqladmin.googleapis.com",   # idem para o Cloud SQL connector dos GRANTs
   ])
 
   project            = var.control_project_id
@@ -116,4 +122,34 @@ output "workload_identity_provider" {
 output "service_account_email" {
   description = "Vai na var TF_SA_EMAIL do repo"
   value       = module.wif.service_account_email
+}
+
+# PAT classico do GitHub (repo, read:user, read:org) usado pela conexao do Cloud
+# Build de cada cliente. So o container e criado aqui; o valor entra a mao:
+#   printf '%s' "<token>" | gcloud secrets versions add cloudbuild-github-token --data-file=- --project=<controle>
+resource "google_secret_manager_secret" "cloudbuild_github_token" {
+  project   = var.control_project_id
+  secret_id = "cloudbuild-github-token"
+
+  replication {
+    user_managed {
+      replicas {
+        location = "us-central1"
+      }
+    }
+  }
+
+  depends_on = [google_project_service.control]
+}
+
+# O stack da leitura neste secret ao service agent do Cloud Build de cada cliente.
+resource "google_secret_manager_secret_iam_member" "tf_github_token" {
+  secret_id = google_secret_manager_secret.cloudbuild_github_token.id
+  role      = "roles/secretmanager.admin"
+  member    = "serviceAccount:${module.wif.service_account_email}"
+}
+
+output "cloudbuild_github_token_secret" {
+  description = "Vai na var CLOUDBUILD_GITHUB_TOKEN_SECRET do repo"
+  value       = google_secret_manager_secret.cloudbuild_github_token.id
 }

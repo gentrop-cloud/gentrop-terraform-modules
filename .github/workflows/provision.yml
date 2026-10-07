@@ -35,10 +35,10 @@ on:
         required: true
         type: string
       action:
-        description: "plan ou apply"
+        description: "plan, apply ou destroy"
         required: true
         type: choice
-        options: [plan, apply]
+        options: [plan, apply, destroy]
       tfvars_json:
         description: "Variaveis nao secretas do stack, em JSON"
         required: true
@@ -75,6 +75,9 @@ jobs:
       PORTAL_URL: ${{ vars.PORTAL_URL }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_IN_AUTOMATION: "1"
+      # Constantes da org para o stack gemini-enterprise (conexao do Cloud Build com o GitHub).
+      TF_VAR_github_app_installation_id: ${{ vars.CLOUDBUILD_GITHUB_INSTALLATION_ID }}
+      TF_VAR_github_token_secret: ${{ vars.CLOUDBUILD_GITHUB_TOKEN_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -115,14 +118,19 @@ jobs:
 
       - name: terraform plan
         working-directory: stacks/${{ inputs.stack }}
-        run: terraform plan -input=false -no-color -out=tfplan 2>&1 | tee -a "$LOG"
+        run: |
+          mode=""
+          [ "$ACTION" = destroy ] && mode="-destroy"
+          terraform plan $mode -input=false -no-color -out=tfplan 2>&1 | tee -a "$LOG"
 
       - name: terraform apply
-        if: inputs.action == 'apply'
+        if: inputs.action == 'apply' || inputs.action == 'destroy'
         working-directory: stacks/${{ inputs.stack }}
         run: |
           terraform apply -input=false -no-color tfplan 2>&1 | tee -a "$LOG"
-          terraform output -json > "$RUNNER_TEMP/outputs.json"
+          if [ "$ACTION" = apply ]; then
+            terraform output -json > "$RUNNER_TEMP/outputs.json"
+          fi
 
       - name: Reportar resultado ao portal
         if: always()

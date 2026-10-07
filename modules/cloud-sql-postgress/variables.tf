@@ -45,3 +45,14 @@ variable "authorized_networks" {
   default     = []
   description = "Lista de redes/IPs com permissão de acesso ao banco"
 }
+variable "deletion_protection" {
+  type        = bool
+  default     = true
+  description = "Impede que o terraform destroy apague a instancia. Desligue (apply) antes de destruir."
+}
+
+variable "use_cloudsql_connector" {
+  type        = bool
+  default     = false
+  description = "Conecta o provider postgresql pelo Cloud SQL connector (credenciais do GCP) em vez do IP publico; dispensa authorized_networks para os GRANTs."
+}

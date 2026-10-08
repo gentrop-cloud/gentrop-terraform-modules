@@ -48,11 +48,16 @@ resource "google_vertex_ai_reasoning_engine" "this" {
   spec {
     service_account = local.service_account_email
 
-    package_spec {
-      pickle_object_gcs_uri    = var.package_spec.pickle_object_gcs_uri
-      requirements_gcs_uri     = var.package_spec.requirements_gcs_uri
-      dependency_files_gcs_uri = var.package_spec.dependency_files_gcs_uri
-      python_version           = var.package_spec.python_version
+    # Sem package_spec o engine nasce vazio e o CI da aplicacao publica o codigo
+    # depois (agent_engines.update); com ele, o bundle ja precisa estar no GCS.
+    dynamic "package_spec" {
+      for_each = var.package_spec == null ? [] : [var.package_spec]
+      content {
+        pickle_object_gcs_uri    = package_spec.value.pickle_object_gcs_uri
+        requirements_gcs_uri     = package_spec.value.requirements_gcs_uri
+        dependency_files_gcs_uri = package_spec.value.dependency_files_gcs_uri
+        python_version           = package_spec.value.python_version
+      }
     }
   }
 

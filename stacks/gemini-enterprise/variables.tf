@@ -2,18 +2,19 @@
 # em clientes/<client_slug>/gemini-enterprise. Deixa o projeto do cliente pronto
 # para o deploy:
 #
-# - app.tf:          app do Gemini Enterprise Adoption Portal (SA de runtime,
-#                    Artifact Registry, Cloud SQL com usuario IAM)
+# - app.tf:          app do Gemini Enterprise Adoption Portal (Cloud Run com as
+#                    env vars, SA de runtime, Artifact Registry, Cloud SQL com
+#                    usuario IAM, dataset + sink da atividade do Gemini Enterprise)
 # - cloudbuild.tf:   conexao com o GitHub (2a geracao) e trigger de deploy do app
 # - hyper-agent.tf:  hyper-agent completo (Agent Engine, Firestore, Tasks, ...)
 #
-# O Cloud Run do app NAO e criado aqui: o cloudbuild.yaml cria e atualiza o
-# servico no deploy, com as env vars vindas das substitutions do trigger. Assim
-# Terraform e deploy nao disputam as env vars.
+# O Cloud Run do app nasce com uma imagem provisoria e todas as env vars. O
+# deploy so troca a imagem (o Terraform ignora a imagem), entao Terraform e
+# deploy nao disputam as env vars.
 #
-# Valores secretos (NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, SMTP_PASSWORD) nunca
-# passam por aqui: o portal grava no Secret Manager do cliente e manda so os
-# nomes em secret_env_vars.
+# Valores secretos (NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, PRIVATE_KEY,
+# CLIENT_EMAIL, SMTP_PASSWORD) nunca passam por aqui: o portal grava no Secret
+# Manager do cliente e manda so os nomes em secret_env_vars.
 
 variable "project_id" {
   description = "Projeto GCP do cliente"
@@ -78,6 +79,12 @@ variable "app_branch" {
   description = "Regex da branch que dispara o deploy"
   type        = string
   default     = "^main$"
+}
+
+variable "genguide_project_id" {
+  description = "Projeto central da Gentrop com o Firestore do GenGuide (trilhas, videos, playlists), lido pelo app com a SA dos secrets PRIVATE_KEY/CLIENT_EMAIL"
+  type        = string
+  default     = "genguide-hmol-01"
 }
 
 variable "smtp_email" {

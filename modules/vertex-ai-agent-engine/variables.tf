@@ -26,13 +26,14 @@ variable "staging_bucket_name" {
 }
 
 variable "package_spec" {
-  description = "GCS URIs of the agent bundle built by the app's CI (Vertex AI SDK deploy). Terraform only registers the resource; it doesn't build or upload this bundle."
+  description = "GCS URIs of the agent bundle built by the app's CI (Vertex AI SDK deploy). null creates the engine without code, for the CI to publish into later. Terraform never builds or uploads the bundle."
   type = object({
     pickle_object_gcs_uri    = string
     requirements_gcs_uri     = optional(string)
     dependency_files_gcs_uri = optional(string)
     python_version           = optional(string, "3.11")
   })
+  default = null
 }
 
 variable "enable_apis" {

@@ -120,14 +120,39 @@ jobs:
         working-directory: stacks/${{ inputs.stack }}
         run: |
           mode=""
-          [ "$ACTION" = destroy ] && mode="-destroy"
+          if [ "$ACTION" = destroy ]; then
+            mode="-destroy"
+            # O que o stack lista em keep-on-destroy.txt pertence ao projeto do cliente,
+            # nao ao stack: o destroy so tira do state, sem apagar no GCP.
+            if [ -f keep-on-destroy.txt ]; then
+              grep -v '^#' keep-on-destroy.txt | grep . | while read -r addr; do
+                terraform state rm -no-color "$addr" 2>&1 | tee -a "$LOG" || true
+              done
+            fi
+          fi
           terraform plan $mode -input=false -no-color -out=tfplan 2>&1 | tee -a "$LOG"
 
       - name: terraform apply
         if: inputs.action == 'apply' || inputs.action == 'destroy'
         working-directory: stacks/${{ inputs.stack }}
         run: |
-          terraform apply -input=false -no-color tfplan 2>&1 | tee -a "$LOG"
+          # Falhas que o proprio GCP manda tentar de novo: nome de recurso apagado ha
+          # pouco ("Please retry in N seconds"), API recem-ativada, regiao do Cloud Run
+          # inicializando, IAM ainda propagando. Uma nova tentativa, esperando o que o
+          # GCP pediu (ex.: Firestore apagado ha pouco pede ~150s), no minimo 120s.
+          TRANSIENT='Please retry in [0-9]+ seconds|Initializing project for the current region|has not been used in project .* or it is disabled|SERVICE_DISABLED|[Ss]ervice account .* does not exist'
+          attempt_log="$RUNNER_TEMP/apply-attempt.log"
+          if ! terraform apply -input=false -no-color tfplan 2>&1 | tee "$attempt_log" | tee -a "$LOG"; then
+            grep -qE "$TRANSIENT" "$attempt_log" || exit 1
+            wait=$(grep -oE 'Please retry in [0-9]+' "$attempt_log" | grep -oE '[0-9]+' | sort -n | tail -1 || true)
+            wait=$(( ${wait:-0} + 15 > 120 ? ${wait:-0} + 15 : 120 ))
+            echo "Erro transitorio do GCP; nova tentativa em ${wait}s." | tee -a "$LOG"
+            sleep "$wait"
+            mode=""
+            [ "$ACTION" = destroy ] && mode="-destroy"
+            terraform plan $mode -input=false -no-color -out=tfplan 2>&1 | tee -a "$LOG"
+            terraform apply -input=false -no-color tfplan 2>&1 | tee -a "$LOG"
+          fi
           if [ "$ACTION" = apply ]; then
             terraform output -json > "$RUNNER_TEMP/outputs.json"
           fi

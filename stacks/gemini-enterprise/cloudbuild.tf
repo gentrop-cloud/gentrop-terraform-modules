@@ -6,9 +6,8 @@
 # - ter `options: logging: CLOUD_LOGGING_ONLY` (trigger com SA propria);
 # - rodar o cloud-sql-proxy com --auto-iam-authn e
 #   --impersonate-service-account=$_APP_SERVICE_ACCOUNT nas migracoes;
-# - criar/atualizar o Cloud Run $_SERVICE_NAME_CLIENT com --service-account
-#   $_APP_SERVICE_ACCOUNT, --add-cloudsql-instances $_INSTANCE_CONNECTION_NAME e
-#   os secrets NEXTAUTH_SECRET / GOOGLE_CLIENT_SECRET do Secret Manager.
+# - so trocar a imagem do Cloud Run $_SERVICE_NAME_CLIENT (gcloud run deploy
+#   --image): o servico, as env vars e os secrets ja vem do app.tf.
 
 resource "google_project_service" "cloudbuild" {
   count = local.cloud_build ? 1 : 0
@@ -136,7 +135,7 @@ resource "google_cloudbuild_trigger" "deploy_app" {
     _GOOGLE_CLIENT_ID         = var.google_client_id
     _AGENT_PROJECT_ID         = var.project_id
     _LOCATION                 = var.region
-    _RESOURCE_ID              = module.agent_engine.reasoning_engine_name
+    _RESOURCE_ID              = basename(module.agent_engine.reasoning_engine_name)
   }
 
   depends_on = [google_project_iam_member.deployer]

@@ -44,6 +44,7 @@ locals {
     "roles/cloudsql.admin",             # app: instancia e GRANTs pelo Cloud SQL connector
     "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub
     "roles/cloudbuild.builds.editor",   # app: trigger de deploy
+    "roles/logging.configWriter",       # app: sink da atividade do Gemini Enterprise
   ]
 
   tf_bindings = { for pair in setproduct(var.client_project_ids, local.tf_client_roles) : "${pair[0]}/${pair[1]}" => {
@@ -62,6 +63,7 @@ resource "google_project_service" "control" {
     "secretmanager.googleapis.com",
     "cloudbuild.googleapis.com", # projeto de cota das chamadas da API do Cloud Build nos clientes
     "sqladmin.googleapis.com",   # idem para o Cloud SQL connector dos GRANTs
+    "logging.googleapis.com",    # idem para o sink de logs do app
   ])
 
   project            = var.control_project_id

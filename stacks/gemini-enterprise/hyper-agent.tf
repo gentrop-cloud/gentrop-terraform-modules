@@ -33,10 +33,10 @@ module "firestore" {
   database_id = local.firestore_database_id
   location_id = var.region
 
-  # Mesma chave do Cloud SQL: protegido por padrao; com allow_sql_deletion um
-  # destroy apaga o banco de verdade (o default do provider so o esquece no state).
-  delete_protection_state = var.allow_sql_deletion ? "DELETE_PROTECTION_DISABLED" : "DELETE_PROTECTION_ENABLED"
-  deletion_policy         = var.allow_sql_deletion ? "DELETE" : "ABANDON"
+  # Um destroy pelo portal apaga o banco de verdade (o default do provider so o
+  # esquece no state, e o apply seguinte falhava com 409).
+  delete_protection_state = "DELETE_PROTECTION_DISABLED"
+  deletion_policy         = "DELETE"
 }
 
 module "auditoria" {
@@ -52,17 +52,14 @@ module "agent_engine" {
   project_id = var.project_id
   region     = var.region
 
-  display_name            = "hyper-agent-root"
-  staging_bucket_name     = local.staging_bucket_name
-  create_reasoning_engine = var.enable_agent_engine
+  display_name        = "hyper-agent-root"
+  staging_bucket_name = local.staging_bucket_name
 
   service_account_id    = "hyper-agent-engine"
   service_account_roles = ["roles/aiplatform.user"]
 
-  package_spec = {
-    pickle_object_gcs_uri = "gs://${local.staging_bucket_name}/agent.pkl"
-    requirements_gcs_uri  = "gs://${local.staging_bucket_name}/requirements.txt"
-  }
+  # Sem package_spec: o engine nasce vazio e o CI do hyper-agent publica o codigo
+  # com agent_engines.update(resource_name=REASONING_ENGINE_ID).
 }
 
 # Cloud Run #2: webhook do Google Chat (publico; a app valida o bearer token do
@@ -88,8 +85,7 @@ module "mensagens_chat" {
       GOOGLE_CLOUD_LOCATION = var.region
       SMTP_EMAIL            = var.smtp_email
     },
-    # REASONING_ENGINE_ID e obrigatorio no codigo: so existe com o Agent Engine ligado.
-    var.enable_agent_engine ? { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name } : {},
+    { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name },
   )
   # So os secrets que este servico le; os do app GE ficam fora.
   secret_env_vars = { for k, v in var.secret_env_vars : k => v if k == "SMTP_PASSWORD" }

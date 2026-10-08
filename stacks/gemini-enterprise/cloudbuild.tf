@@ -136,7 +136,7 @@ resource "google_cloudbuild_trigger" "deploy_app" {
     _GOOGLE_CLIENT_ID         = var.google_client_id
     _AGENT_PROJECT_ID         = var.project_id
     _LOCATION                 = var.region
-    _RESOURCE_ID              = module.agent_engine.reasoning_engine_name != null ? module.agent_engine.reasoning_engine_name : ""
+    _RESOURCE_ID              = module.agent_engine.reasoning_engine_name
   }
 
   depends_on = [google_project_iam_member.deployer]

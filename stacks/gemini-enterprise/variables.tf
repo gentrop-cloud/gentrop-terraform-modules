@@ -44,18 +44,6 @@ variable "google_client_id" {
   default     = ""
 }
 
-variable "enable_agent_engine" {
-  description = "false no primeiro apply. Depois que o bundle (agent.pkl, requirements.txt) estiver no bucket de staging, aplique de novo com true."
-  type        = bool
-  default     = false
-}
-
-variable "allow_sql_deletion" {
-  description = "Desliga a protecao de exclusao dos bancos (Cloud SQL e Firestore). Aplique com true antes de um destroy."
-  type        = bool
-  default     = false
-}
-
 # --- Cloud Build (desligado ate o fluxo de deploy ser definido) ---------------
 
 variable "enable_cloud_build" {

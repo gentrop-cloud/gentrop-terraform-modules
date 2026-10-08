@@ -34,6 +34,9 @@ resource "google_cloud_scheduler_job" "this" {
 
     oidc_token {
       service_account_email = local.service_account_email
+      # Explicito: sem ele o Scheduler grava a URL com "/" no fim e todo plan
+      # mostra um diff para voltar a null. O Cloud Run aceita a URL do servico.
+      audience = "${trimsuffix(var.uri, "/")}/"
     }
   }
 

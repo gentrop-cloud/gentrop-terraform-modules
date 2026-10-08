@@ -83,8 +83,26 @@ module "db" {
 
   iam_database_users     = [local.app_db_user]
   use_cloudsql_connector = true
-  deletion_protection    = !var.allow_sql_deletion
+  deletion_protection    = false # o portal precisa conseguir destruir o cliente
 
   # Sem depends_on: o modulo declara o proprio provider postgresql, o que o
   # Terraform nao aceita junto com depends_on. Ele habilita o sqladmin sozinho.
+}
+
+# O service agent do Cloud Run precisa de roles/run.serviceAgent. Num projeto em
+# que a API foi desligada e religada, o agent e recriado e o papel continua no
+# antigo ("deleted:serviceAccount:..."); o Cloud Run fica em "Initializing
+# project for the current region" ate estourar o prazo. Garantir aqui cobre isso.
+resource "google_project_service_identity" "run" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "run.googleapis.com"
+
+  depends_on = [google_project_service.app]
+}
+
+resource "google_project_iam_member" "run_service_agent" {
+  project = var.project_id
+  role    = "roles/run.serviceAgent"
+  member  = "serviceAccount:${google_project_service_identity.run.email}"
 }

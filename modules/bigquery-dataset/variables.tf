@@ -28,3 +28,9 @@ variable "enable_apis" {
   type        = bool
   default     = true
 }
+
+variable "delete_contents_on_destroy" {
+  description = "Let a destroy delete the dataset even when it still has tables Terraform does not manage (e.g. written by a log sink or by the app)."
+  type        = bool
+  default     = false
+}

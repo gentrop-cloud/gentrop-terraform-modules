@@ -45,6 +45,10 @@ module "auditoria" {
 
   dataset_id = "hyper_agent_auditoria"
   location   = var.region
+
+  # Tabelas que o hyper-agent grava ficam fora do Terraform; sem isto o destroy
+  # falha com o dataset ainda cheio.
+  delete_contents_on_destroy = true
 }
 
 module "agent_engine" {

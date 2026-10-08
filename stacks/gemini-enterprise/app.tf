@@ -1,5 +1,5 @@
-# App do Gemini Enterprise Adoption Portal: tudo que o deploy (Cloud Build)
-# precisa encontrar pronto no projeto do cliente.
+# App do Gemini Enterprise Adoption Portal: o Cloud Run com toda a configuracao,
+# o banco e os dados que ele le. O deploy so publica imagens novas.
 
 data "google_project" "this" {
   project_id = var.project_id
@@ -13,6 +13,81 @@ locals {
 
   # Usuario IAM do Cloud SQL para uma SA: o email sem ".gserviceaccount.com".
   app_db_user = trimsuffix(google_service_account.app.email, ".gserviceaccount.com")
+
+  # Secrets que o app le; o portal grava os valores e manda so os nomes.
+  # PRIVATE_KEY/CLIENT_EMAIL: chave da SA de leitura do Firestore do GenGuide.
+  app_secret_names = ["NEXTAUTH_SECRET", "GOOGLE_CLIENT_SECRET", "PRIVATE_KEY", "CLIENT_EMAIL"]
+}
+
+# Nomes batem com os process.env lidos pelo app (branch Develop). Sem DATABASE_URL:
+# com INSTANCE_CONNECTION_NAME o app conecta pelo Cloud SQL connector com IAM.
+module "app_run" {
+  source     = "../../modules/cloud-run"
+  project_id = var.project_id
+  location   = var.region
+
+  service_name                   = local.app_service_name
+  create_service_account         = false
+  existing_service_account_email = google_service_account.app.email
+  memory                         = "1Gi"
+  allow_unauthenticated          = true
+
+  env_vars = {
+    USE_CLOUD_SQL               = "true"
+    INSTANCE_CONNECTION_NAME    = module.db.instance_connection_name
+    DB_NAME                     = module.db.database_name
+    DB_USER                     = local.app_db_user
+    NEXTAUTH_URL                = local.app_url
+    GOOGLE_CLIENT_ID            = var.google_client_id
+    AGENT_PROJECT_ID            = var.project_id
+    LOCATION                    = var.region
+    RESOURCE_ID                 = basename(module.agent_engine.reasoning_engine_name)
+    HYPER_FIRESTORE_PROJECT_ID  = var.project_id
+    HYPER_FIRESTORE_DATABASE_ID = local.firestore_database_id
+    BIGQUERY_PROJECT_ID         = var.project_id
+    BIGQUERY_DATASET_ID         = module.atividade_ge.dataset_id
+    FIRESTORE_PROJECT_ID        = var.genguide_project_id
+  }
+  secret_env_vars = { for k, v in var.secret_env_vars : k => v if contains(local.app_secret_names, k) }
+
+  depends_on = [google_project_iam_member.app, google_project_service.app]
+}
+
+# Sem os dois o login do app nao funciona; avisa no log do run sem barrar o apply.
+check "app_secrets" {
+  assert {
+    condition     = alltrue([for k in ["NEXTAUTH_SECRET", "GOOGLE_CLIENT_SECRET"] : contains(keys(var.secret_env_vars), k)]) && var.google_client_id != ""
+    error_message = "O app GE precisa de google_client_id e dos secrets NEXTAUTH_SECRET e GOOGLE_CLIENT_SECRET no provisionamento."
+  }
+}
+
+# Painel de adocao: o app le as tabelas diarias
+# discoveryengine_googleapis_com_gemini_enterprise_user_activity_AAAAMMDD, que o
+# sink abaixo cria a partir dos logs do Gemini Enterprise. O log de atividade
+# precisa estar ligado na configuracao do app no Gemini Enterprise.
+module "atividade_ge" {
+  source     = "../../modules/bigquery-dataset"
+  project_id = var.project_id
+
+  dataset_id                 = "gemini_enterprise_atividade"
+  location                   = var.region
+  delete_contents_on_destroy = true
+}
+
+resource "google_logging_project_sink" "atividade_ge" {
+  project     = var.project_id
+  name        = "gemini-enterprise-atividade"
+  destination = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${module.atividade_ge.dataset_id}"
+  filter      = "log_id(\"discoveryengine.googleapis.com/gemini_enterprise_user_activity\")"
+
+  unique_writer_identity = true
+}
+
+resource "google_bigquery_dataset_iam_member" "atividade_ge_sink" {
+  project    = var.project_id
+  dataset_id = module.atividade_ge.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = google_logging_project_sink.atividade_ge.writer_identity
 }
 
 resource "google_project_service" "app" {

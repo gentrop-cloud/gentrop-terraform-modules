@@ -34,6 +34,18 @@ variable "billing_account" {
   sensitive = true
 }
 
+# Enviadas pelo portal a todo stack; este nao usa. Declaradas para o Terraform
+# nao avisar de variavel nao declarada no portal.auto.tfvars.json.
+variable "region" {
+  type    = string
+  default = "us-central1"
+}
+
+variable "secret_env_vars" {
+  type    = map(string)
+  default = {}
+}
+
 variable "wif_provider" {
   description = "Provider do WIF no projeto seed (TF_VAR via var WIF_PROVIDER do repo)"
   type        = string

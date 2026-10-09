@@ -11,7 +11,8 @@
 # - "PERMISSION_DENIED" no projeto do cliente: o projeto nao esta em
 #   client_project_ids do bootstrap/portal-provisioning.
 #
-# Vars do repositorio: WIF_PROVIDER, TF_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL.
+# Vars do repositorio: WIF_PROVIDER, TF_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
+# CLIENTS_FOLDER_ID e CLIENTS_BILLING_ACCOUNT (stack project).
 name: provision
 run-name: ${{ inputs.action }} ${{ inputs.stack }} · ${{ inputs.client_slug }}
 
@@ -78,6 +79,9 @@ jobs:
       # Constantes da org para o stack gemini-enterprise (conexao do Cloud Build com o GitHub).
       TF_VAR_github_app_installation_id: ${{ vars.CLOUDBUILD_GITHUB_INSTALLATION_ID }}
       TF_VAR_github_token_secret: ${{ vars.CLOUDBUILD_GITHUB_TOKEN_SECRET }}
+      # Constantes da org para o stack project (pasta e faturamento dos clientes).
+      TF_VAR_folder_id: ${{ vars.CLIENTS_FOLDER_ID }}
+      TF_VAR_billing_account: ${{ vars.CLIENTS_BILLING_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
 

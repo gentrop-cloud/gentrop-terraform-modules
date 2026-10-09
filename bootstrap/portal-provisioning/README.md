@@ -54,6 +54,7 @@ Vars e secret do repositório:
 | `CLOUDBUILD_GITHUB_TOKEN_SECRET` | var | secret do prod (sem mudança) |
 | `TF_STATE_BUCKET`, `PORTAL_URL` | var | sem mudança |
 | `PORTAL_SA_EMAIL` | var | ainda não definida: o stack project não concede o Secret Manager ao portal |
+| `PROJECT_OWNERS` | var | quem ganha `roles/owner` em cada projeto novo, separado por vírgula (`user:...`, `group:...`) |
 | `CLIENTS_BILLING_ACCOUNT` | secret | conta de faturamento dos clientes |
 
 `TF_SA_EMAIL` (a `tf-provisioner` do prod) segue no repositório para os runs da

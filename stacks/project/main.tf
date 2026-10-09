@@ -62,6 +62,12 @@ variable "portal_service_account_email" {
   default     = ""
 }
 
+variable "project_owners" {
+  description = "Quem ganha roles/owner em cada projeto novo, separado por virgula, no formato do IAM (ex.: user:fulano@gentrop.com,group:admins@gentrop.com). TF_VAR via var PROJECT_OWNERS do repo."
+  type        = string
+  default     = ""
+}
+
 variable "github_token_secret" {
   description = "Secret do PAT do Cloud Build no projeto seed (TF_VAR via var CLOUDBUILD_GITHUB_TOKEN_SECRET do repo). Vazio sem Cloud Build."
   type        = string
@@ -179,6 +185,15 @@ resource "google_project_iam_member" "portal_secrets" {
   member  = "serviceAccount:${var.portal_service_account_email}"
 }
 
+# As pessoas que administram os clientes: sem isto, so as SAs enxergam o projeto.
+resource "google_project_iam_member" "owners" {
+  for_each = toset(compact([for m in split(",", var.project_owners) : trimspace(m)]))
+
+  project = google_project.this.project_id
+  role    = "roles/owner"
+  member  = each.value
+}
+
 data "google_client_openid_userinfo" "me" {}
 
 resource "google_project_iam_member" "seed" {
@@ -200,6 +215,7 @@ resource "google_project_iam_member_remove" "creator_owner" {
     google_project_iam_member.seed,
     google_project_iam_member.tf_provisioner,
     google_project_iam_member.portal_secrets,
+    google_project_iam_member.owners,
     google_service_account_iam_member.wif,
   ]
 }

@@ -8,11 +8,11 @@
 #   stack, com as mesmas -backend-config: terraform force-unlock <LOCK_ID>
 # - O log nao aparece no portal e o run fica "Na fila": PORTAL_URL (var do repo)
 #   precisa ser a URL publica do portal, igual ao audience que ele espera.
-# - "PERMISSION_DENIED" no projeto do cliente: o projeto nao esta em
-#   client_project_ids do bootstrap/portal-provisioning.
+# - "PERMISSION_DENIED" no projeto do cliente: o projeto nao tem a tf-provisioner
+#   (rode antes o stack project) ou ela nao tem o papel (stacks/project/main.tf).
 #
-# Vars do repositorio: WIF_PROVIDER, TF_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
-# CLIENTS_FOLDER_ID e CLIENTS_BILLING_ACCOUNT (stack project).
+# Vars do repositorio: WIF_PROVIDER, SEED_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
+# CLIENTS_FOLDER_ID, PORTAL_SA_EMAIL. Secret do repositorio: CLIENTS_BILLING_ACCOUNT.
 name: provision
 run-name: ${{ inputs.action }} ${{ inputs.stack }} · ${{ inputs.client_slug }}
 
@@ -81,7 +81,11 @@ jobs:
       TF_VAR_github_token_secret: ${{ vars.CLOUDBUILD_GITHUB_TOKEN_SECRET }}
       # Constantes da org para o stack project (pasta e faturamento dos clientes).
       TF_VAR_folder_id: ${{ vars.CLIENTS_FOLDER_ID }}
-      TF_VAR_billing_account: ${{ vars.CLIENTS_BILLING_ACCOUNT }}
+      TF_VAR_wif_provider: ${{ vars.WIF_PROVIDER }}
+      TF_VAR_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_portal_service_account_email: ${{ vars.PORTAL_SA_EMAIL }}
+      # Secret, e nao var: a conta de faturamento e tratada como confidencial.
+      TF_VAR_billing_account: ${{ secrets.CLIENTS_BILLING_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +95,10 @@ jobs:
           [[ "$CLIENT_SLUG" =~ ^[a-z][a-z0-9-]{1,38}[a-z0-9]$ ]] || { echo "client_slug invalido"; exit 1; }
           [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || { echo "project_id invalido"; exit 1; }
           [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
+          # O projeto do cliente e a tf-provisioner nunca sao apagados pelo pipeline.
+          if [[ "$STACK" == project && "$ACTION" == destroy ]]; then
+            echo "destroy do stack project nao e permitido: exclua o projeto no console"; exit 1
+          fi
           # O portal manda project_id e client_slug tambem dentro do JSON: os dois tem que bater.
           echo "$TFVARS_JSON" | jq -e --arg p "$PROJECT_ID" --arg s "$CLIENT_SLUG" \
             'type == "object" and .project_id == $p and .client_slug == $s' >/dev/null \
@@ -107,7 +115,9 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.TF_SA_EMAIL }}
+          # O stack project roda como a geapp-seed-sa, que so cria projetos; os demais,
+          # como a tf-provisioner do proprio projeto (project_id ja validado acima).
+          service_account: ${{ inputs.stack == 'project' && vars.SEED_SA_EMAIL || format('tf-provisioner@{0}.iam.gserviceaccount.com', inputs.project_id) }}
 
       - uses: hashicorp/setup-terraform@v3
         with:

@@ -1,5 +1,0 @@
-# Enderecos que um destroy so remove do state, sem apagar no GCP. O projeto do
-# cliente nunca e apagado pelo portal: excluir um projeto e manual, no console.
-# Lido pelo provision.yml.
-google_project.this
-google_project_iam_member_remove.creator_owner

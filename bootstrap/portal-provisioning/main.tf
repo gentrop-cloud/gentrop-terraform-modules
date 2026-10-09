@@ -1,7 +1,13 @@
 variable "control_project_id" {
-  description = "Projeto que guarda o bucket de state, o WIF do GitHub e a SA tf-provisioner"
+  description = "Projeto seed: guarda o WIF do GitHub e a geapp-seed-sa. Nao e projeto de cliente nem de prod."
   type        = string
-  default     = "geapp-gentrop-prod-0001"
+  default     = "geapp-prod-seed-0001"
+}
+
+variable "service_account_email" {
+  description = "geapp-seed-sa: so cria projetos de clientes (stack project). Criada pelo admin da org, que tambem concede projectCreator na pasta e billing.user no faturamento (README)."
+  type        = string
+  default     = "geapp-seed-sa@geapp-prod-seed-0001.iam.gserviceaccount.com"
 }
 
 variable "state_bucket" {
@@ -10,60 +16,19 @@ variable "state_bucket" {
   default     = "gentrop-tfstate"
 }
 
-variable "client_project_ids" {
-  description = "Projetos de clientes que o portal pode provisionar. Adicione um projeto aqui no onboarding do cliente."
-  type        = list(string)
-  default     = ["estudos-jean-pereira"]
-}
-
-variable "portal_service_account_email" {
-  description = "SA de runtime do geapp-portal (grava secrets no projeto do cliente). null enquanto o portal nao estiver no Cloud Run."
-  type        = string
-  default     = null
-}
-
 locals {
   repository = "gentrop-cloud/gentrop-terraform-modules"
-
-  # O que os stacks em stacks/ criam no projeto do cliente. Mantenha em sincronia
-  # quando um stack passar a usar um servico novo.
-  tf_client_roles = [
-    "roles/serviceusage.serviceUsageAdmin",  # habilitar APIs
-    "roles/iam.serviceAccountAdmin",         # criar SAs de runtime
-    "roles/iam.serviceAccountUser",          # anexar SA ao Cloud Run (actAs)
-    "roles/resourcemanager.projectIamAdmin", # papeis das SAs de runtime
-    "roles/run.admin",
-    "roles/artifactregistry.admin",
-    "roles/secretmanager.viewer",       # o stack so referencia secrets que o portal criou
-    "roles/datastore.owner",            # hyper-agent: Firestore
-    "roles/bigquery.admin",             # hyper-agent: dataset de auditoria
-    "roles/cloudtasks.admin",           # hyper-agent
-    "roles/cloudscheduler.admin",       # hyper-agent
-    "roles/aiplatform.admin",           # hyper-agent: Agent Engine
-    "roles/storage.admin",              # hyper-agent: bucket de staging
-    "roles/cloudsql.admin",             # app: instancia e GRANTs pelo Cloud SQL connector
-    "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub
-    "roles/cloudbuild.builds.editor",   # app: trigger de deploy
-    "roles/logging.configWriter",       # app: sink da atividade do Gemini Enterprise
-  ]
-
-  tf_bindings = { for pair in setproduct(var.client_project_ids, local.tf_client_roles) : "${pair[0]}/${pair[1]}" => {
-    project = pair[0]
-    role    = pair[1]
-  } }
 }
 
-# As credenciais da tf-provisioner usam o projeto de controle como projeto de
-# cota. Sem estas APIs aqui, chamadas em projetos de clientes falham com 403
-# "API has not been used in project <controle>" (ex.: IAM de projeto).
+# A geapp-seed-sa usa o seed como projeto de cota. Sem estas APIs aqui, o stack
+# project falha com 403 "API has not been used in project <seed>". A
+# tf-provisioner de cada cliente usa o proprio projeto (stacks/project).
 resource "google_project_service" "control" {
   for_each = toset([
     "cloudresourcemanager.googleapis.com",
+    "cloudbilling.googleapis.com", # vincular o projeto novo ao faturamento
     "serviceusage.googleapis.com",
-    "secretmanager.googleapis.com",
-    "cloudbuild.googleapis.com", # projeto de cota das chamadas da API do Cloud Build nos clientes
-    "sqladmin.googleapis.com",   # idem para o Cloud SQL connector dos GRANTs
-    "logging.googleapis.com",    # idem para o sink de logs do app
+    "secretmanager.googleapis.com", # PAT do Cloud Build, abaixo
   ])
 
   project            = var.control_project_id
@@ -71,7 +36,7 @@ resource "google_project_service" "control" {
   disable_on_destroy = false
 }
 
-# Pool e SA proprios: nao reaproveita o github-actions-pool / github-deployer do
+# Pool proprio: nao reaproveita o github-actions-pool / github-deployer do
 # examples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
 module "wif" {
   source = "../../modules/workload-identity"
@@ -88,32 +53,17 @@ module "wif" {
   }
   attribute_condition = "assertion.repository == \"${local.repository}\" && assertion.ref == \"refs/heads/main\""
 
-  service_account_id           = "tf-provisioner"
-  service_account_display_name = "Terraform do portal de provisionamento"
-  service_account_roles        = []
-  github_repositories          = [local.repository]
+  create_service_account         = false
+  existing_service_account_email = var.service_account_email
+  github_repositories            = [local.repository]
 }
 
+# storage.admin, e nao objectAdmin: alem do proprio state, o stack project da a
+# tf-provisioner de cada cliente acesso ao bucket.
 resource "google_storage_bucket_iam_member" "tf_state" {
   bucket = var.state_bucket
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${module.wif.service_account_email}"
-}
-
-resource "google_project_iam_member" "tf_client" {
-  for_each = local.tf_bindings
-
-  project = each.value.project
-  role    = each.value.role
-  member  = "serviceAccount:${module.wif.service_account_email}"
-}
-
-resource "google_project_iam_member" "portal_secrets" {
-  for_each = var.portal_service_account_email == null ? toset([]) : toset(var.client_project_ids)
-
-  project = each.value
-  role    = "roles/secretmanager.admin"
-  member  = "serviceAccount:${var.portal_service_account_email}"
 }
 
 output "workload_identity_provider" {
@@ -122,13 +72,13 @@ output "workload_identity_provider" {
 }
 
 output "service_account_email" {
-  description = "Vai na var TF_SA_EMAIL do repo"
+  description = "Vai na var SEED_SA_EMAIL do repo"
   value       = module.wif.service_account_email
 }
 
 # PAT classico do GitHub (repo, read:user, read:org) usado pela conexao do Cloud
 # Build de cada cliente. So o container e criado aqui; o valor entra a mao:
-#   printf '%s' "<token>" | gcloud secrets versions add cloudbuild-github-token --data-file=- --project=<controle>
+#   printf '%s' "<token>" | gcloud secrets versions add cloudbuild-github-token --data-file=- --project=geapp-prod-seed-0001
 resource "google_secret_manager_secret" "cloudbuild_github_token" {
   project   = var.control_project_id
   secret_id = "cloudbuild-github-token"
@@ -144,7 +94,8 @@ resource "google_secret_manager_secret" "cloudbuild_github_token" {
   depends_on = [google_project_service.control]
 }
 
-# O stack da leitura neste secret ao service agent do Cloud Build de cada cliente.
+# O stack project da admin deste secret a tf-provisioner de cada cliente, que da
+# leitura nele ao service agent do Cloud Build do cliente.
 resource "google_secret_manager_secret_iam_member" "tf_github_token" {
   secret_id = google_secret_manager_secret.cloudbuild_github_token.id
   role      = "roles/secretmanager.admin"

@@ -88,11 +88,13 @@ resource "google_cloud_run_v2_service" "this" {
     }
   }
 
-  # O CD faz "deploy" de novas imagens direto (gcloud/API), fora deste Terraform;
-  # sem isso o apply reverteria a imagem para var.image a cada mudança de env/secret.
+  # O CD faz "deploy" de novas imagens e env vars direto (gcloud/API), fora deste
+  # Terraform; sem isso o apply reverteria o que o deploy aplicou. env_vars e
+  # secret_env_vars so valem na criacao do servico.
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].containers[0].env,
     ]
   }
 

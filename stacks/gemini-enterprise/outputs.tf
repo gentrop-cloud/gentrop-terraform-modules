@@ -6,10 +6,6 @@ output "gatilho_scheduler_url" {
   value = module.gatilho_scheduler.service_url
 }
 
-output "artifact_registry_url" {
-  value = module.registry.repository_url
-}
-
 output "agent_engine_staging_bucket" {
   value = "gs://${module.agent_engine.staging_bucket_name}"
 }
@@ -43,6 +39,7 @@ output "db_instance_connection_name" {
   value = module.db.instance_connection_name
 }
 
-output "cloud_build_trigger" {
-  value = one(google_cloudbuild_trigger.deploy_app[*].name)
+# O provision.yml roda estes triggers no fim do apply: e o primeiro deploy.
+output "cloud_build_triggers" {
+  value = concat(google_cloudbuild_trigger.deploy_app[*].name, google_cloudbuild_trigger.deploy_hyper_agent[*].name)
 }

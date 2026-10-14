@@ -98,6 +98,7 @@ locals {
     "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub
     "roles/cloudbuild.builds.editor",   # app: trigger de deploy
     "roles/logging.configWriter",       # app: sink da atividade do Gemini Enterprise
+    "roles/logging.viewer",             # provision.yml: log do build no primeiro deploy
   ]
 
   # O que a geapp-seed-sa mantem no projeto depois de largar o Owner: so o

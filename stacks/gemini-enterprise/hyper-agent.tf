@@ -17,15 +17,6 @@ resource "google_project_service" "discovery_engine" {
   disable_on_destroy = false
 }
 
-module "registry" {
-  source     = "../../modules/artifact-registry"
-  project_id = var.project_id
-  location   = var.region
-
-  repository_id = "hyper-agent"
-  description   = "Imagens dos 2 Cloud Run do hyper-agent"
-}
-
 module "firestore" {
   source     = "../../modules/firestore-database"
   project_id = var.project_id
@@ -82,17 +73,7 @@ module "mensagens_chat" {
 
   allow_unauthenticated = true
 
-  # Nomes batem com os os.environ lidos em cloud_run/hyper-agent-mensagens-chat/main.py.
-  env_vars = merge(
-    {
-      GOOGLE_CLOUD_PROJECT  = var.project_id
-      GOOGLE_CLOUD_LOCATION = var.region
-      SMTP_EMAIL            = var.smtp_email
-    },
-    { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name },
-  )
-  # So os secrets que este servico le; os do app GE ficam fora.
-  secret_env_vars = { for k, v in var.secret_env_vars : k => v if k == "SMTP_PASSWORD" }
+  # Env vars e o secret SMTP_PASSWORD vem do cloudbuild.yaml do hyper-agent, no deploy.
 
   depends_on = [module.firestore]
 }
@@ -128,17 +109,9 @@ module "gatilho_scheduler" {
     "serviceAccount:${module.disparo_verificacao.service_account_email}",
   ]
 
-  # Nomes batem com os os.environ.get lidos em cloud_run/hyper-agent-gatilho-scheduler/main.py.
-  # PILOT_WHITELIST fica de fora: com ENABLE_WHITELIST=true (default do codigo)
-  # ninguem recebe mensagem, que e o lado seguro.
-  env_vars = {
-    PROJECT_ID       = var.project_id
-    LOCATION         = "global"
-    REGION_TASKS     = var.region
-    QUEUE_NAME       = module.fila_disparos.queue_name
-    AGENT_ENDPOINT   = module.mensagens_chat.service_url
-    SA_EMAIL_INVOKER = local.gatilho_scheduler_sa_email
-  }
+  # Env vars vem do cloudbuild.yaml do hyper-agent, no deploy. PILOT_WHITELIST
+  # fica de fora: com ENABLE_WHITELIST=true (default do codigo) ninguem recebe
+  # mensagem, que e o lado seguro.
 
   depends_on = [module.firestore]
 }

@@ -30,12 +30,17 @@ resource "google_project_service_identity" "cloudbuild" {
 
 # O token do GitHub mora num secret unico no projeto de controle; cada cliente
 # so recebe permissao de leitura nele para o service agent do Cloud Build.
+# O e-mail e montado a mao: para o Cloud Build, o service identity devolve a SA
+# legada <numero>@cloudbuild.gserviceaccount.com, mas quem le o token ao criar a
+# conexao e o service agent service-<numero>@gcp-sa-cloudbuild.
 resource "google_secret_manager_secret_iam_member" "github_token" {
   count = local.cloud_build ? 1 : 0
 
   secret_id = var.github_token_secret
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_project_service_identity.cloudbuild[0].email}"
+  member    = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+
+  depends_on = [google_project_service_identity.cloudbuild]
 }
 
 resource "google_cloudbuildv2_connection" "github" {

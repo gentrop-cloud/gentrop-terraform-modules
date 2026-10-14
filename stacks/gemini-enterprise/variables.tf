@@ -5,12 +5,12 @@
 # - app.tf:          app do Gemini Enterprise Adoption Portal (Cloud Run com as
 #                    env vars, SA de runtime, Artifact Registry, Cloud SQL com
 #                    usuario IAM, dataset + sink da atividade do Gemini Enterprise)
-# - cloudbuild.tf:   conexao com o GitHub (2a geracao) e trigger de deploy do app
+# - cloudbuild.tf:   conexao com o GitHub (2a geracao) e um trigger de deploy por app
 # - hyper-agent.tf:  hyper-agent completo (Agent Engine, Firestore, Tasks, ...)
 #
-# O Cloud Run do app nasce com uma imagem provisoria e todas as env vars. O
-# deploy so troca a imagem (o Terraform ignora a imagem), entao Terraform e
-# deploy nao disputam as env vars.
+# Os Cloud Run nascem com uma imagem provisoria e sem env vars. O deploy (Cloud
+# Build) aplica imagem e env vars, e o Terraform ignora as duas, entao Terraform
+# e deploy nao disputam a configuracao (ADR 0009 do geapp-portal).
 #
 # Valores secretos (NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, PRIVATE_KEY,
 # CLIENT_EMAIL, SMTP_PASSWORD) nunca passam por aqui: o portal grava no Secret
@@ -45,10 +45,10 @@ variable "google_client_id" {
   default     = ""
 }
 
-# --- Cloud Build (desligado ate o fluxo de deploy ser definido) ---------------
+# --- Cloud Build -----------------------------------------------------------------
 
 variable "enable_cloud_build" {
-  description = "Cria a conexao com o GitHub e o trigger de deploy do app. Exige as duas variaveis abaixo."
+  description = "Opcao \"Deploy pelo Cloud Build\" do portal: cria a conexao com o GitHub e um trigger por app, e o provision.yml faz o primeiro deploy. Exige as duas variaveis abaixo."
   type        = bool
   default     = false
 }
@@ -75,8 +75,14 @@ variable "app_repository" {
   default     = "https://github.com/gentrop-cloud/gemini-enteprise-adoption-portal.git"
 }
 
+variable "hyper_agent_repository" {
+  description = "Repo do hyper-agent que o trigger observa"
+  type        = string
+  default     = "https://github.com/gentrop-cloud/hyper-agent.git"
+}
+
 variable "app_branch" {
-  description = "Regex da branch que dispara o deploy"
+  description = "Regex da branch que dispara o deploy dos dois apps"
   type        = string
   default     = "^main$"
 }

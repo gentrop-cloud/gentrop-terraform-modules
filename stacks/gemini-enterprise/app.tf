@@ -19,8 +19,8 @@ locals {
   app_secret_names = ["NEXTAUTH_SECRET", "GOOGLE_CLIENT_SECRET", "PRIVATE_KEY", "CLIENT_EMAIL"]
 }
 
-# Nomes batem com os process.env lidos pelo app (branch Develop). Sem DATABASE_URL:
-# com INSTANCE_CONNECTION_NAME o app conecta pelo Cloud SQL connector com IAM.
+# Sem env vars: quem as aplica e o cloudbuild.yaml do app, no deploy (ADR 0009
+# do geapp-portal), e o modulo ignora env depois da criacao.
 module "app_run" {
   source     = "../../modules/cloud-run"
   project_id = var.project_id
@@ -31,24 +31,6 @@ module "app_run" {
   existing_service_account_email = google_service_account.app.email
   memory                         = "1Gi"
   allow_unauthenticated          = true
-
-  env_vars = {
-    USE_CLOUD_SQL               = "true"
-    INSTANCE_CONNECTION_NAME    = module.db.instance_connection_name
-    DB_NAME                     = module.db.database_name
-    DB_USER                     = local.app_db_user
-    NEXTAUTH_URL                = local.app_url
-    GOOGLE_CLIENT_ID            = var.google_client_id
-    AGENT_PROJECT_ID            = var.project_id
-    LOCATION                    = var.region
-    RESOURCE_ID                 = basename(module.agent_engine.reasoning_engine_name)
-    HYPER_FIRESTORE_PROJECT_ID  = var.project_id
-    HYPER_FIRESTORE_DATABASE_ID = local.firestore_database_id
-    BIGQUERY_PROJECT_ID         = var.project_id
-    BIGQUERY_DATASET_ID         = module.atividade_ge.dataset_id
-    FIRESTORE_PROJECT_ID        = var.genguide_project_id
-  }
-  secret_env_vars = { for k, v in var.secret_env_vars : k => v if contains(local.app_secret_names, k) }
 
   depends_on = [google_project_iam_member.app, google_project_service.app]
 }
@@ -107,7 +89,7 @@ module "app_registry" {
   location   = var.region
 
   repository_id = "app"
-  description   = "Imagens do app Gemini Enterprise Adoption Portal"
+  description   = "Imagens do app Gemini Enterprise Adoption Portal e dos 2 Cloud Run do hyper-agent"
 }
 
 # SA de runtime do Cloud Run do app. Tambem e a dona das tabelas: as migracoes

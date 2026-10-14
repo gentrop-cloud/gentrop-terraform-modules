@@ -17,13 +17,23 @@ resource "google_project_service" "discovery_engine" {
   disable_on_destroy = false
 }
 
-module "registry" {
-  source     = "../../modules/artifact-registry"
-  project_id = var.project_id
-  location   = var.region
+# Datastore do Vertex AI Search consultado pelo agente de engajamento
+# (VertexAiSearchTool). O agente monta o caminho com locations/global. Nasce
+# vazio: os documentos sao importados fora do Terraform.
+# shortcut: sem importacao automatica, porque a origem do conteudo ainda nao foi
+# definida; o agente nao acha nada na busca ate alguem importar os documentos.
+resource "google_discovery_engine_data_store" "engajamento" {
+  project = var.project_id
+  # Sufixo pelo mesmo motivo do Cloud SQL e da fila: um ID apagado pode ficar
+  # reservado, e um destroy seguido de novo apply falharia.
+  data_store_id     = "hyper-agent-engajamento-${random_id.db_suffix.hex}"
+  display_name      = "hyper-agent-engajamento"
+  location          = "global"
+  industry_vertical = "GENERIC"
+  content_config    = "CONTENT_REQUIRED"
+  solution_types    = ["SOLUTION_TYPE_SEARCH"]
 
-  repository_id = "hyper-agent"
-  description   = "Imagens dos 2 Cloud Run do hyper-agent"
+  depends_on = [google_project_service.discovery_engine]
 }
 
 module "firestore" {
@@ -59,8 +69,11 @@ module "agent_engine" {
   display_name        = "hyper-agent-root"
   staging_bucket_name = local.staging_bucket_name
 
-  service_account_id    = "hyper-agent-engine"
-  service_account_roles = ["roles/aiplatform.user"]
+  service_account_id = "hyper-agent-engine"
+  service_account_roles = [
+    "roles/aiplatform.user",
+    "roles/discoveryengine.viewer", # busca no datastore de engajamento
+  ]
 
   # Sem package_spec: o engine nasce vazio e o CI do hyper-agent publica o codigo
   # com agent_engines.update(resource_name=REASONING_ENGINE_ID).
@@ -82,17 +95,7 @@ module "mensagens_chat" {
 
   allow_unauthenticated = true
 
-  # Nomes batem com os os.environ lidos em cloud_run/hyper-agent-mensagens-chat/main.py.
-  env_vars = merge(
-    {
-      GOOGLE_CLOUD_PROJECT  = var.project_id
-      GOOGLE_CLOUD_LOCATION = var.region
-      SMTP_EMAIL            = var.smtp_email
-    },
-    { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name },
-  )
-  # So os secrets que este servico le; os do app GE ficam fora.
-  secret_env_vars = { for k, v in var.secret_env_vars : k => v if k == "SMTP_PASSWORD" }
+  # Env vars e o secret SMTP_PASSWORD vem do cloudbuild.yaml do hyper-agent, no deploy.
 
   depends_on = [module.firestore]
 }
@@ -128,17 +131,9 @@ module "gatilho_scheduler" {
     "serviceAccount:${module.disparo_verificacao.service_account_email}",
   ]
 
-  # Nomes batem com os os.environ.get lidos em cloud_run/hyper-agent-gatilho-scheduler/main.py.
-  # PILOT_WHITELIST fica de fora: com ENABLE_WHITELIST=true (default do codigo)
-  # ninguem recebe mensagem, que e o lado seguro.
-  env_vars = {
-    PROJECT_ID       = var.project_id
-    LOCATION         = "global"
-    REGION_TASKS     = var.region
-    QUEUE_NAME       = module.fila_disparos.queue_name
-    AGENT_ENDPOINT   = module.mensagens_chat.service_url
-    SA_EMAIL_INVOKER = local.gatilho_scheduler_sa_email
-  }
+  # Env vars vem do cloudbuild.yaml do hyper-agent, no deploy. PILOT_WHITELIST
+  # fica de fora: com ENABLE_WHITELIST=true (default do codigo) ninguem recebe
+  # mensagem, que e o lado seguro.
 
   depends_on = [module.firestore]
 }

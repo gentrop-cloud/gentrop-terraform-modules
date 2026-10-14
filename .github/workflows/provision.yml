@@ -10,6 +10,9 @@
 #   precisa ser a URL publica do portal, igual ao audience que ele espera.
 # - "PERMISSION_DENIED" no projeto do cliente: o projeto nao tem a tf-provisioner
 #   (rode antes o stack project) ou ela nao tem o papel (stacks/project/main.tf).
+# - "Primeiro deploy" falhou: o fim do log do build sai no log do run; o log
+#   inteiro fica no link do console impresso no inicio do step. Corrija o app
+#   (push na main ja redeploya) ou use "Tentar de novo" no portal.
 #
 # Vars do repositorio: WIF_PROVIDER, SEED_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
 # CLIENTS_FOLDER_ID, PORTAL_SA_EMAIL, PROJECT_OWNERS. Secret do repositorio:
@@ -172,6 +175,45 @@ jobs:
           if [ "$ACTION" = apply ]; then
             terraform output -json > "$RUNNER_TEMP/outputs.json"
           fi
+
+      # Primeiro deploy (ADR 0009 do geapp-portal): roda os triggers que o stack
+      # criou, os mesmos que o push na main dos apps dispara depois. Um build que
+      # falha faz o run falhar; "Tentar de novo" no portal reaplica e roda de novo.
+      - name: Primeiro deploy (Cloud Build)
+        if: inputs.action == 'apply'
+        run: |
+          mapfile -t triggers < <(jq -r '.cloud_build_triggers.value // [] | .[]' "$RUNNER_TEMP/outputs.json")
+          [ ${#triggers[@]} -gt 0 ] || exit 0
+          region=$(jq -r '.region' <<<"$TFVARS_JSON")
+
+          declare -A builds
+          for t in "${triggers[@]}"; do
+            builds[$t]=$(gcloud builds triggers run "$t" --project="$PROJECT_ID" --region="$region" \
+              --branch=main --format='value(metadata.build.id)')
+            echo "Deploy $t: build ${builds[$t]} https://console.cloud.google.com/cloud-build/builds;region=$region/${builds[$t]}?project=$PROJECT_ID" | tee -a "$LOG"
+          done
+
+          # Os builds rodam em paralelo no Cloud Build; aqui so espera cada um.
+          failed=0
+          for t in "${triggers[@]}"; do
+            id=${builds[$t]}
+            while :; do
+              status=$(gcloud builds describe "$id" --project="$PROJECT_ID" --region="$region" --format='value(status)')
+              case "$status" in
+                QUEUED|PENDING|WORKING) sleep 15 ;;
+                *) break ;;
+              esac
+            done
+            echo "Deploy $t: $status" | tee -a "$LOG"
+            if [ "$status" != SUCCESS ]; then
+              failed=1
+              # O fim do log do build (CLOUD_LOGGING_ONLY: so no Cloud Logging).
+              gcloud logging read "resource.type=build AND resource.labels.build_id=$id" \
+                --project="$PROJECT_ID" --order=desc --limit=100 --format='value(textPayload)' \
+                | tac | tee -a "$LOG" || true
+            fi
+          done
+          exit "$failed"
 
       - name: Reportar resultado ao portal
         if: always()

@@ -93,6 +93,7 @@ locals {
     "roles/cloudtasks.admin",           # hyper-agent
     "roles/cloudscheduler.admin",       # hyper-agent
     "roles/aiplatform.admin",           # hyper-agent: Agent Engine
+    "roles/discoveryengine.admin",      # hyper-agent: datastore do Vertex AI Search
     "roles/storage.admin",              # hyper-agent: bucket de staging
     "roles/cloudsql.admin",             # app: instancia e GRANTs pelo Cloud SQL connector
     "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub

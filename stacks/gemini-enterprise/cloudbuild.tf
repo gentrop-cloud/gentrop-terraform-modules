@@ -185,7 +185,7 @@ resource "google_cloudbuild_trigger" "deploy_hyper_agent" {
     _GCP_PROJECT_REGION          = var.region
     _AGENT_STAGING_BUCKET        = "gs://${module.agent_engine.staging_bucket_name}"
     _AGENT_REASONING_ENGINE_NAME = module.agent_engine.reasoning_engine_name
-    _VERTEX_DATASTORE_ID         = var.vertex_datastore_id
+    _VERTEX_DATASTORE_ID         = google_discovery_engine_data_store.engajamento.data_store_id
     _FIRESTORE_DB_ID             = local.firestore_database_id
     _IMAGE_ARTIFACT_REGISTRY     = module.app_registry.repository_url
     _QUEUE_NAME                  = module.fila_disparos.queue_name

@@ -18,6 +18,11 @@ output "firestore_database" {
   value = module.firestore.name
 }
 
+output "vertex_datastore_id" {
+  description = "Datastore do agente de engajamento; os documentos sao importados nele a parte"
+  value       = google_discovery_engine_data_store.engajamento.data_store_id
+}
+
 output "bigquery_dataset" {
   value = module.auditoria.dataset_id
 }

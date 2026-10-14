@@ -45,12 +45,6 @@ variable "google_client_id" {
   default     = ""
 }
 
-variable "vertex_datastore_id" {
-  description = "Datastore do Vertex AI Search lido pelo agente de engajamento do hyper-agent (vai como _VERTEX_DATASTORE_ID no deploy)"
-  type        = string
-  default     = ""
-}
-
 # --- Cloud Build -----------------------------------------------------------------
 
 variable "enable_cloud_build" {

@@ -17,6 +17,25 @@ resource "google_project_service" "discovery_engine" {
   disable_on_destroy = false
 }
 
+# Datastore do Vertex AI Search consultado pelo agente de engajamento
+# (VertexAiSearchTool). O agente monta o caminho com locations/global. Nasce
+# vazio: os documentos sao importados fora do Terraform.
+# shortcut: sem importacao automatica, porque a origem do conteudo ainda nao foi
+# definida; o agente nao acha nada na busca ate alguem importar os documentos.
+resource "google_discovery_engine_data_store" "engajamento" {
+  project = var.project_id
+  # Sufixo pelo mesmo motivo do Cloud SQL e da fila: um ID apagado pode ficar
+  # reservado, e um destroy seguido de novo apply falharia.
+  data_store_id     = "hyper-agent-engajamento-${random_id.db_suffix.hex}"
+  display_name      = "hyper-agent-engajamento"
+  location          = "global"
+  industry_vertical = "GENERIC"
+  content_config    = "CONTENT_REQUIRED"
+  solution_types    = ["SOLUTION_TYPE_SEARCH"]
+
+  depends_on = [google_project_service.discovery_engine]
+}
+
 module "firestore" {
   source     = "../../modules/firestore-database"
   project_id = var.project_id
@@ -50,8 +69,11 @@ module "agent_engine" {
   display_name        = "hyper-agent-root"
   staging_bucket_name = local.staging_bucket_name
 
-  service_account_id    = "hyper-agent-engine"
-  service_account_roles = ["roles/aiplatform.user"]
+  service_account_id = "hyper-agent-engine"
+  service_account_roles = [
+    "roles/aiplatform.user",
+    "roles/discoveryengine.viewer", # busca no datastore de engajamento
+  ]
 
   # Sem package_spec: o engine nasce vazio e o CI do hyper-agent publica o codigo
   # com agent_engines.update(resource_name=REASONING_ENGINE_ID).

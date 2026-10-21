@@ -80,9 +80,6 @@ jobs:
       PORTAL_URL: ${{ vars.PORTAL_URL }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_IN_AUTOMATION: "1"
-      # Constantes da org para o stack gemini-enterprise (conexao do Cloud Build com o GitHub).
-      TF_VAR_github_app_installation_id: ${{ vars.CLOUDBUILD_GITHUB_INSTALLATION_ID }}
-      TF_VAR_github_token_secret: ${{ vars.CLOUDBUILD_GITHUB_TOKEN_SECRET }}
       # Constantes da org para o stack project (pasta e faturamento dos clientes).
       TF_VAR_folder_id: ${{ vars.CLIENTS_FOLDER_ID }}
       TF_VAR_wif_provider: ${{ vars.WIF_PROVIDER }}
@@ -176,9 +173,11 @@ jobs:
             terraform output -json > "$RUNNER_TEMP/outputs.json"
           fi
 
-      # Primeiro deploy (ADR 0009 do geapp-portal): roda os triggers que o stack
-      # criou, os mesmos que o push na main dos apps dispara depois. Um build que
-      # falha faz o run falhar; "Tentar de novo" no portal reaplica e roda de novo.
+      # Primeiro deploy (ADRs 0009 e 0010 do geapp-portal): submete a configuracao
+      # dos triggers de Pub/Sub que o stack criou, com _SHA vazio, que faz o build
+      # usar o ultimo pacote da main. Nao usa `gcloud builds triggers run`: num
+      # trigger de Pub/Sub sem repositorio ele responde 500. Um build que falha faz
+      # o run falhar; "Tentar de novo" no portal reaplica e submete de novo.
       - name: Primeiro deploy (Cloud Build)
         if: inputs.action == 'apply'
         run: |
@@ -188,8 +187,14 @@ jobs:
 
           declare -A builds
           for t in "${triggers[@]}"; do
-            builds[$t]=$(gcloud builds triggers run "$t" --project="$PROJECT_ID" --region="$region" \
-              --branch=main --format='value(metadata.build.id)')
+            trigger="$RUNNER_TEMP/trigger-$t.json"
+            gcloud builds triggers describe "$t" --project="$PROJECT_ID" --region="$region" --format=json > "$trigger"
+            jq '.build' "$trigger" > "$RUNNER_TEMP/build-$t.json"
+            # "|" separa as substitutions porque _SECRET_ENV tem virgulas.
+            subs=$(jq -r '.substitutions | to_entries | map("\(.key)=\(if .key == "_SHA" then "" else .value end)") | join("|")' "$trigger")
+            builds[$t]=$(gcloud builds submit --no-source --project="$PROJECT_ID" --region="$region" \
+              --config="$RUNNER_TEMP/build-$t.json" --substitutions="^|^$subs" \
+              --service-account="$(jq -r '.serviceAccount' "$trigger")" --async --format='value(id)')
             echo "Deploy $t: build ${builds[$t]} https://console.cloud.google.com/cloud-build/builds;region=$region/${builds[$t]}?project=$PROJECT_ID" | tee -a "$LOG"
           done
 
@@ -207,10 +212,15 @@ jobs:
             echo "Deploy $t: $status" | tee -a "$LOG"
             if [ "$status" != SUCCESS ]; then
               failed=1
-              # O fim do log do build (CLOUD_LOGGING_ONLY: so no Cloud Logging).
-              gcloud logging read "resource.type=build AND resource.labels.build_id=$id" \
-                --project="$PROJECT_ID" --order=desc --limit=100 --format='value(textPayload)' \
-                | tac | tee -a "$LOG" || true
+              # O fim do log do build do trigger e, se ele chegou a disparar, do build
+              # do app (CLOUD_LOGGING_ONLY: so no Cloud Logging).
+              tail_log() {
+                gcloud logging read "resource.type=build AND resource.labels.build_id=$1" \
+                  --project="$PROJECT_ID" --order=desc --limit=100 --format='value(textPayload)' | tac
+              }
+              tail_log "$id" | tee "$RUNNER_TEMP/outer.log" | tee -a "$LOG" || true
+              app=$(grep -oE 'Build do app [0-9a-f-]{36}' "$RUNNER_TEMP/outer.log" | head -1 | awk '{print $4}' || true)
+              [ -n "$app" ] && { echo "--- build do app $app" | tee -a "$LOG"; tail_log "$app" | tee -a "$LOG" || true; }
             fi
           done
           exit "$failed"

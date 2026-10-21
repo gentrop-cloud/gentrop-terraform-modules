@@ -173,15 +173,38 @@ resource "google_storage_bucket_iam_member" "tf_state" {
   member = google_service_account.tf_provisioner.member
 }
 
-# Criar um trigger de Pub/Sub num topico de outro projeto exige
-# pubsub.topics.attachSubscription nele; o Pub/Sub nao aceita a permissao por pasta.
+# Quem cria a assinatura do trigger de Pub/Sub (stack gemini-enterprise) no
+# topico do seed e o service agent do Cloud Build do cliente, nao quem chama a
+# API: sem pubsub.topics.attachSubscription para ele, o trigger nao e criado. O
+# Pub/Sub nao aceita a permissao por pasta, entao vai uma por cliente, aqui.
+resource "google_project_service" "cloudbuild" {
+  project            = google_project.this.project_id
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+
+  depends_on = [google_project_service.base]
+}
+
+# O service agent so existe depois da API ligada; isto garante que ele foi criado
+# antes de receber a permissao no topico.
+resource "google_project_service_identity" "cloudbuild" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  service  = "cloudbuild.googleapis.com"
+
+  depends_on = [google_project_service.cloudbuild]
+}
+
 resource "google_pubsub_topic_iam_member" "release_subscriber" {
   for_each = toset(var.release_topics)
 
   project = split("/", each.value)[1]
   topic   = each.value
   role    = "roles/pubsub.subscriber"
-  member  = google_service_account.tf_provisioner.member
+  # Montado a mao: o service identity devolve a SA legada <numero>@cloudbuild.
+  member = "serviceAccount:service-${google_project.this.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+
+  depends_on = [google_project_service_identity.cloudbuild]
 }
 
 resource "google_project_iam_member" "portal_secrets" {

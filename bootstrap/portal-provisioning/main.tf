@@ -215,8 +215,8 @@ resource "google_pubsub_topic_iam_member" "release_publisher" {
 }
 
 # O Pub/Sub ignora a permissao por pasta: o stack project, que roda como a
-# geapp-seed-sa, da a tf-provisioner de cada cliente o subscriber (necessario para
-# criar o trigger) nos topicos. Ela so administra estes dois topicos.
+# geapp-seed-sa, da ao service agent do Cloud Build de cada cliente o subscriber
+# (necessario para criar o trigger) nos topicos. Ela so administra estes dois topicos.
 resource "google_pubsub_topic_iam_member" "seed_admin" {
   for_each = google_pubsub_topic.release
 

@@ -24,16 +24,27 @@ resource "google_project_service" "discovery_engine" {
 # definida; o agente nao acha nada na busca ate alguem importar os documentos.
 resource "google_discovery_engine_data_store" "engajamento" {
   project = var.project_id
-  # Sufixo pelo mesmo motivo do Cloud SQL e da fila: um ID apagado pode ficar
-  # reservado, e um destroy seguido de novo apply falharia.
-  data_store_id     = "hyper-agent-engajamento-${random_id.db_suffix.hex}"
+  # Um ID apagado fica bloqueado por horas ("is being deleted, please wait").
+  # Sufixo proprio, e nao o do Cloud SQL: o teste-portal ja perdeu o ID com esse.
+  data_store_id     = "hyper-agent-engajamento-${random_id.datastore_suffix.hex}"
   display_name      = "hyper-agent-engajamento"
   location          = "global"
   industry_vertical = "GENERIC"
   content_config    = "CONTENT_REQUIRED"
   solution_types    = ["SOLUTION_TYPE_SEARCH"]
 
+  # O Discovery Engine preenche um document_processing_config padrao depois de
+  # criar, e o provider o trata como "forces replacement": sem isto, todo apply
+  # apaga e recria o datastore (e esbarra no ID bloqueado acima).
+  lifecycle {
+    ignore_changes = [document_processing_config]
+  }
+
   depends_on = [google_project_service.discovery_engine]
+}
+
+resource "random_id" "datastore_suffix" {
+  byte_length = 2
 }
 
 module "firestore" {

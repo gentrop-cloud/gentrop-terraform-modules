@@ -51,7 +51,7 @@ Vars e secret do repositório:
 | `WIF_PROVIDER` | var | pool `github-terraform` do prod (sem mudança) |
 | `SEED_SA_EMAIL` | var | `geapp-seed-sa@geapp-prod-seed-0001.iam.gserviceaccount.com` |
 | `CLIENTS_FOLDER_ID` | var | id da pasta de clientes |
-| `CLOUDBUILD_GITHUB_TOKEN_SECRET` | var | secret do prod (sem mudança) |
+| `CLOUDBUILD_GITHUB_TOKEN_SECRET`, `CLOUDBUILD_GITHUB_INSTALLATION_ID` | var | não são mais lidas (ADR 0010 do geapp-portal): apagar depois do release, junto com o secret do token |
 | `TF_STATE_BUCKET`, `PORTAL_URL` | var | sem mudança |
 | `PORTAL_SA_EMAIL` | var | ainda não definida: o stack project não concede o Secret Manager ao portal |
 | `PROJECT_OWNERS` | var | quem ganha `roles/owner` em cada projeto novo, separado por vírgula (`user:...`, `group:...`) |
@@ -66,6 +66,43 @@ numa var, num commit ou num `--body`. O comando abaixo pede o valor no terminal:
 ```bash
 gh secret set CLIENTS_BILLING_ACCOUNT --repo gentrop-cloud/gentrop-terraform-modules
 ```
+
+### Releases dos apps (aplicado à mão em 21/10/2026)
+
+As peças do bloco "Releases dos apps" do `main.tf` (ADR 0010 do geapp-portal) já
+existem no seed, criadas com os comandos abaixo. O apply deste root as importa:
+
+```bash
+P=geapp-prod-seed-0001; N=900385293676; B=gs://$P-releases
+RP=release-publisher@$P.iam.gserviceaccount.com; SEED=geapp-seed-sa@$P.iam.gserviceaccount.com
+
+gcloud services enable pubsub.googleapis.com iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com --project=$P
+gcloud storage buckets create $B --project=$P --location=us-central1 --uniform-bucket-level-access --public-access-prevention
+gcloud pubsub topics create release-geapp release-hyper-agent --project=$P
+
+# WIF so para a main dos dois apps, num pool separado do github-terraform
+gcloud iam workload-identity-pools create github-releases --project=$P --location=global
+gcloud iam workload-identity-pools providers create-oidc app-repos --project=$P --location=global \
+  --workload-identity-pool=github-releases --issuer-uri=https://token.actions.githubusercontent.com \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+  --attribute-condition='assertion.repository in ["gentrop-cloud/gemini-enteprise-adoption-portal","gentrop-cloud/hyper-agent"] && assertion.ref == "refs/heads/main"'
+gcloud iam service-accounts create release-publisher --project=$P
+for r in gemini-enteprise-adoption-portal hyper-agent; do
+  gcloud iam service-accounts add-iam-policy-binding $RP --role=roles/iam.workloadIdentityUser \
+    --member="principalSet://iam.googleapis.com/projects/$N/locations/global/workloadIdentityPools/github-releases/attribute.repository/gentrop-cloud/$r"
+done
+
+gcloud storage buckets add-iam-policy-binding $B --member=serviceAccount:$RP --role=roles/storage.objectUser
+gcloud storage buckets add-iam-policy-binding $B --role=roles/storage.objectViewer \
+  --member="principalSet://cloudresourcemanager.googleapis.com/folders/540065658735/type/ServiceAccount"
+for t in release-geapp release-hyper-agent; do
+  gcloud pubsub topics add-iam-policy-binding $t --project=$P --member=serviceAccount:$RP --role=roles/pubsub.publisher
+  gcloud pubsub topics add-iam-policy-binding $t --project=$P --member=serviceAccount:$SEED --role=roles/pubsub.admin
+done
+```
+
+A regra de ciclo de vida do bucket (apagar pacotes `.tar.gz` com mais de 180 dias)
+também foi aplicada, com `gcloud storage buckets update --lifecycle-file`.
 
 ## Onboarding de um cliente novo
 

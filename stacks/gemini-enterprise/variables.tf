@@ -5,7 +5,7 @@
 # - app.tf:          app do Gemini Enterprise Adoption Portal (Cloud Run com as
 #                    env vars, SA de runtime, Artifact Registry, Cloud SQL com
 #                    usuario IAM, dataset + sink da atividade do Gemini Enterprise)
-# - cloudbuild.tf:   conexao com o GitHub (2a geracao) e um trigger de deploy por app
+# - cloudbuild.tf:   um trigger de Pub/Sub por app, que faz o deploy a partir do bucket de releases
 # - hyper-agent.tf:  hyper-agent completo (Agent Engine, Firestore, Tasks, ...)
 #
 # Os Cloud Run nascem com uma imagem provisoria e sem env vars. O deploy (Cloud
@@ -48,43 +48,26 @@ variable "google_client_id" {
 # --- Cloud Build -----------------------------------------------------------------
 
 variable "enable_cloud_build" {
-  description = "Opcao \"Deploy pelo Cloud Build\" do portal: cria a conexao com o GitHub e um trigger por app, e o provision.yml faz o primeiro deploy. Exige as duas variaveis abaixo."
+  description = "Opcao \"Deploy pelo Cloud Build\" do portal: cria um trigger de Pub/Sub por app, e o provision.yml faz o primeiro deploy"
   type        = bool
   default     = false
 }
 
-variable "github_app_installation_id" {
-  description = "ID da instalacao do app \"Google Cloud Build\" na org do GitHub (TF_VAR via var CLOUDBUILD_GITHUB_INSTALLATION_ID do repo)"
-  # string, e nao number: o provision.yml sempre exporta o TF_VAR, vazio quando a
-  # var do repo nao existe, e um number vazio quebra o plan.
-  type    = string
-  default = ""
-}
-
-variable "github_token_secret" {
-  description = "Secret com o PAT classico (repo, read:user, read:org) da conexao do Cloud Build, ex.: projects/<controle>/secrets/cloudbuild-github-token (TF_VAR via var CLOUDBUILD_GITHUB_TOKEN_SECRET do repo)"
-  type        = string
-  default     = ""
-}
-
 # --- fixos por enquanto ---------------------------------------------------------
 
-variable "app_repository" {
-  description = "Repo do app GE que o trigger observa"
+variable "release_bucket" {
+  description = "Bucket de releases no seed (bootstrap), com <app>/<sha>.tar.gz e o ponteiro <app>/latest"
   type        = string
-  default     = "https://github.com/gentrop-cloud/gemini-enteprise-adoption-portal.git"
+  default     = "geapp-prod-seed-0001-releases"
 }
 
-variable "hyper_agent_repository" {
-  description = "Repo do hyper-agent que o trigger observa"
-  type        = string
-  default     = "https://github.com/gentrop-cloud/hyper-agent.git"
-}
-
-variable "app_branch" {
-  description = "Regex da branch que dispara o deploy dos dois apps"
-  type        = string
-  default     = "^main$"
+variable "release_topics" {
+  description = "Topico de release de cada app no seed (bootstrap); a chave e a pasta do app no bucket"
+  type        = map(string)
+  default = {
+    geapp       = "projects/geapp-prod-seed-0001/topics/release-geapp"
+    hyper-agent = "projects/geapp-prod-seed-0001/topics/release-hyper-agent"
+  }
 }
 
 variable "genguide_project_id" {

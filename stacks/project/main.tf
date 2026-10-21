@@ -68,10 +68,13 @@ variable "project_owners" {
   default     = ""
 }
 
-variable "github_token_secret" {
-  description = "Secret do PAT do Cloud Build no projeto seed (TF_VAR via var CLOUDBUILD_GITHUB_TOKEN_SECRET do repo). Vazio sem Cloud Build."
-  type        = string
-  default     = ""
+variable "release_topics" {
+  description = "Topicos de release dos apps no seed (bootstrap, ADR 0010 do geapp-portal), que os triggers do stack gemini-enterprise escutam"
+  type        = list(string)
+  default = [
+    "projects/geapp-prod-seed-0001/topics/release-geapp",
+    "projects/geapp-prod-seed-0001/topics/release-hyper-agent",
+  ]
 }
 
 locals {
@@ -87,19 +90,18 @@ locals {
     "roles/resourcemanager.projectIamAdmin", # papeis das SAs de runtime
     "roles/run.admin",
     "roles/artifactregistry.admin",
-    "roles/secretmanager.viewer",       # o stack so referencia secrets que o portal criou
-    "roles/datastore.owner",            # hyper-agent: Firestore
-    "roles/bigquery.admin",             # hyper-agent: dataset de auditoria
-    "roles/cloudtasks.admin",           # hyper-agent
-    "roles/cloudscheduler.admin",       # hyper-agent
-    "roles/aiplatform.admin",           # hyper-agent: Agent Engine
-    "roles/discoveryengine.admin",      # hyper-agent: datastore do Vertex AI Search
-    "roles/storage.admin",              # hyper-agent: bucket de staging
-    "roles/cloudsql.admin",             # app: instancia e GRANTs pelo Cloud SQL connector
-    "roles/cloudbuild.connectionAdmin", # app: conexao com o GitHub
-    "roles/cloudbuild.builds.editor",   # app: trigger de deploy
-    "roles/logging.configWriter",       # app: sink da atividade do Gemini Enterprise
-    "roles/logging.viewer",             # provision.yml: log do build no primeiro deploy
+    "roles/secretmanager.viewer",     # o stack so referencia secrets que o portal criou
+    "roles/datastore.owner",          # hyper-agent: Firestore
+    "roles/bigquery.admin",           # hyper-agent: dataset de auditoria
+    "roles/cloudtasks.admin",         # hyper-agent
+    "roles/cloudscheduler.admin",     # hyper-agent
+    "roles/aiplatform.admin",         # hyper-agent: Agent Engine
+    "roles/discoveryengine.admin",    # hyper-agent: datastore do Vertex AI Search
+    "roles/storage.admin",            # hyper-agent: bucket de staging
+    "roles/cloudsql.admin",           # app: instancia e GRANTs pelo Cloud SQL connector
+    "roles/cloudbuild.builds.editor", # app: trigger de deploy
+    "roles/logging.configWriter",     # app: sink da atividade do Gemini Enterprise
+    "roles/logging.viewer",           # provision.yml: log do build no primeiro deploy
   ]
 
   # O que a geapp-seed-sa mantem no projeto depois de largar o Owner: so o
@@ -171,12 +173,15 @@ resource "google_storage_bucket_iam_member" "tf_state" {
   member = google_service_account.tf_provisioner.member
 }
 
-resource "google_secret_manager_secret_iam_member" "github_token" {
-  count = var.github_token_secret == "" ? 0 : 1
+# Criar um trigger de Pub/Sub num topico de outro projeto exige
+# pubsub.topics.attachSubscription nele; o Pub/Sub nao aceita a permissao por pasta.
+resource "google_pubsub_topic_iam_member" "release_subscriber" {
+  for_each = toset(var.release_topics)
 
-  secret_id = var.github_token_secret
-  role      = "roles/secretmanager.admin"
-  member    = google_service_account.tf_provisioner.member
+  project = split("/", each.value)[1]
+  topic   = each.value
+  role    = "roles/pubsub.subscriber"
+  member  = google_service_account.tf_provisioner.member
 }
 
 resource "google_project_iam_member" "portal_secrets" {

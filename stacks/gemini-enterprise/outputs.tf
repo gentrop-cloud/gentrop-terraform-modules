@@ -44,7 +44,7 @@ output "db_instance_connection_name" {
   value = module.db.instance_connection_name
 }
 
-# O provision.yml roda estes triggers no fim do apply: e o primeiro deploy.
+# O provision.yml submete a configuracao destes triggers no fim do apply: e o primeiro deploy.
 output "cloud_build_triggers" {
-  value = concat(google_cloudbuild_trigger.deploy_app[*].name, google_cloudbuild_trigger.deploy_hyper_agent[*].name)
+  value = [for t in google_cloudbuild_trigger.deploy : t.name]
 }

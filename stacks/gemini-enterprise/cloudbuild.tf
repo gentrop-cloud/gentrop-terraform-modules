@@ -76,8 +76,8 @@ resource "google_cloudbuild_trigger" "deploy" {
   name            = each.value.trigger
   service_account = google_service_account.deployer[0].id
 
-  # Criar a assinatura num topico do seed exige pubsub.subscriber da tf-provisioner
-  # nele, dado pelo stack project.
+  # Criar a assinatura num topico do seed exige pubsub.subscriber do service agent
+  # do Cloud Build deste projeto nele, dado pelo stack project.
   pubsub_config {
     topic = var.release_topics[each.key]
   }

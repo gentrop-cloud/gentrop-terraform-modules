@@ -10,5 +10,9 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 6.0" # deletion_policy no google_project
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 6.0" # service identity do Cloud Build
+    }
   }
 }

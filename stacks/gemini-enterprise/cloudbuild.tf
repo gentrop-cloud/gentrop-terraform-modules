@@ -68,6 +68,16 @@ resource "google_storage_bucket_iam_member" "deployer_staging" {
   member = "serviceAccount:${google_service_account.deployer[0].email}"
 }
 
+# O SDK do Vertex AI le os metadados do bucket (storage.buckets.get) antes de
+# subir o pacote, e o objectAdmin so cobre os objetos.
+resource "google_storage_bucket_iam_member" "deployer_staging_get" {
+  count = local.cloud_build ? 1 : 0
+
+  bucket = module.agent_engine.staging_bucket_name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.deployer[0].email}"
+}
+
 resource "google_cloudbuild_trigger" "deploy" {
   for_each = local.cloud_build ? local.release_apps : {}
 
@@ -126,7 +136,7 @@ resource "google_cloudbuild_trigger" "deploy" {
     }
   }
 
-  depends_on = [google_project_iam_member.deployer, google_storage_bucket_iam_member.deployer_staging]
+  depends_on = [google_project_iam_member.deployer, google_storage_bucket_iam_member.deployer_staging, google_storage_bucket_iam_member.deployer_staging_get]
 }
 
 locals {

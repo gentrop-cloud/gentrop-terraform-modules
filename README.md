@@ -16,7 +16,7 @@ em qual projeto GCP e em qual state eles rodam.
 
 ```
 modules/                  # módulos reutilizáveis, versionados por tag vX.Y.Z (ver modules/README.md)
-samples/                  # bancada de teste dos módulos: source local, state local, sem CI
+samples/                  # bancada de teste dos módulos: source local, state local, sem CI (ver samples/README.md)
 stacks/                   # stacks genéricas aplicadas pelo geapp-portal, uma por cliente
   project/                #   cria o projeto GCP do cliente e a SA tf-provisioner
   gemini-enterprise/      #   app + hyper-agent + Cloud Build do cliente
@@ -63,22 +63,6 @@ Assim uma mudança em `modules/` só chega num projeto quando você sobe o `ref`
 
 ## Samples
 
-Cada pasta é standalone: edite o `main.tf` com os dados do seu projeto GCP e rode
-`terraform init` + `terraform apply` direto, sem git/CI. Cada uma tem seu README.
-
-- [`artifact-registry-test`](samples/artifact-registry-test) — só o repositório
-- [`secret-manager-test`](samples/secret-manager-test) — só os secrets
-- [`cloud-run-test`](samples/cloud-run-test) — só o Cloud Run (imagem placeholder)
-- [`cloud-sql-test`](samples/cloud-sql-test) — só o Cloud SQL
-- [`github-actions-wif`](samples/github-actions-wif) — WIF pra GitHub Actions
-- [`firestore-database-test`](samples/firestore-database-test) — só o Firestore
-- [`bigquery-dataset-test`](samples/bigquery-dataset-test) — só o BigQuery
-- [`cloud-tasks-queue-test`](samples/cloud-tasks-queue-test) — só a fila de Cloud Tasks
-- [`cloud-scheduler-http-test`](samples/cloud-scheduler-http-test) — só o job de Cloud Scheduler
-- [`vertex-ai-agent-engine-test`](samples/vertex-ai-agent-engine-test) — só o Vertex AI Agent Engine
-- [`artifact-registry-secret-manager-cloud-run`](samples/artifact-registry-secret-manager-cloud-run) —
-  stack completa pós-criação do projeto (registry + secrets + Cloud SQL + Cloud Run
-  já conectados entre si)
-- [`hyper-agent`](samples/hyper-agent) — Cloud Scheduler + Cloud Tasks +
-  2 Cloud Run + Firestore + BigQuery + Vertex AI Agent Engine, já conectados
-  entre si
+Um sample por módulo (`samples/<módulo>`) e duas combinações prontas, para testar o
+código local antes do PR. O que são, como usar e a lista completa estão em
+[`samples/README.md`](samples/README.md).

@@ -23,7 +23,7 @@ module "github_wif" {
     "roles/iam.serviceAccountUser",       # Usuário da conta de serviço
     "roles/cloudsql.instanceUser",        # Usuário da instância do Cloud SQL
   ]
-  github_repositories = ["gentrop-cloud/gentrack"]
+  github_repositories = ["gentrop-cloud/gemini-enteprise-adoption-portal"] //Mudar o nome do repo aqui
 }
 
 output "workload_identity_provider" {

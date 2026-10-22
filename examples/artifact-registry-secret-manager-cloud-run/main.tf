@@ -21,18 +21,14 @@ variable "google_client_secret" {
 }
 
 locals {
-  project_id = "estudos-jean-pereira"
+  project_id = "geapp-gentrop-prod-0001" // adicionar no projeto aqui
   region     = "us-central1"
 
-  # Rede autorizada a conectar direto no Cloud SQL (IP publico) -- necessario so
-  # porque o modulo cloud-sql-postgress roda GRANTs via conexao direta na hora do
-  # apply. Troque pelo IP publico de quem roda o terraform apply.
-  authorized_networks = [
-    {
-      name  = "acesso-terraform-apply"
-      value = "0.0.0.0/0" # RESTRINJA para o seu IP antes de usar fora de teste
-    }
-  ]
+  # Redes autorizadas a conectar direto no Cloud SQL (IP publico). Vazio: so o
+  # Cloud Run (via Cloud SQL connector) acessa. So e necessario liberar o IP de
+  # quem roda o apply (/32) se usar iam_database_users, pois o modulo roda GRANTs
+  # via conexao direta.
+  authorized_networks = []
 }
 
 data "google_project" "this" {
@@ -62,6 +58,7 @@ module "db" {
 
   instance_name       = "${local.project_id}-db"
   database_name       = "app"
+  database_version    = "POSTGRES_18"
   region              = local.region
   db_admin_password   = random_password.db_admin.result
   authorized_networks = local.authorized_networks
@@ -77,23 +74,57 @@ module "secrets" {
   project_id = local.project_id
 
   secret_ids = [
-    "NEXTAUTH_SECRET",
-    "GOOGLE_CLIENT_SECRET",
-    "DATABASE_URL",
-    "DIRECT_URL",
+    "AGENT_PROJECT_ID",
+    "APP_SERVICE_ACCOUNT",
+    "DB_USER",
+    "DB_USER_ENCODED",
+    "FIRESTORE_PROJECT_ID",
+    "GOOGLE_CLIENT_ID",
+    "HYPER_FIRESTORE_DATABASE_ID",
+    "HYPER_FIRESTORE_PROJECT_ID",
+    "IDENTITY_POOL",
+    "IDENTITY_SA",
+    "IMAGE_REGISTRY",
+    "INSTANCE_CONNECTION_NAME",
+    "LOCATION",
+    "NEXTAUTH_URL",
+    "PROJECT_ID",
+    "RESOURCE_ID",
+    "SERVICE_NAME_CLIENT"
   ]
 }
 
 locals {
+  app_env_vars = {
+    GOOGLE_CLIENT_ID = var.google_client_id
+    NEXTAUTH_URL     = local.cloud_run_url
+  }
+
   database_url = "postgresql://postgres:${random_password.db_admin.result}@localhost/${module.db.database_name}?host=/cloudsql/${module.db.instance_connection_name}"
 }
 
 resource "google_secret_manager_secret_version" "values" {
+  # Cloud Run exige que toda secret referenciada ("latest") tenha ao menos uma versao.
+  # GOOGLE_CLIENT_ID e NEXTAUTH_URL ficam de fora: vao como env comum (app_env_vars).
   for_each = {
-    NEXTAUTH_SECRET      = random_password.nextauth_secret.result
-    GOOGLE_CLIENT_SECRET = var.google_client_secret
-    DATABASE_URL         = local.database_url
-    DIRECT_URL           = local.database_url
+    LOCATION                 = local.region
+    PROJECT_ID               = local.project_id
+    DB_USER                  = "postgres"
+    DB_USER_ENCODED          = urlencode("postgres")
+    INSTANCE_CONNECTION_NAME = module.db.instance_connection_name
+    IMAGE_REGISTRY           = module.registry.repository_url
+    APP_SERVICE_ACCOUNT      = "cloud-run-runtime@${local.project_id}.iam.gserviceaccount.com"
+    SERVICE_NAME_CLIENT      = local.project_id
+    AGENT_PROJECT_ID         = local.project_id
+    FIRESTORE_PROJECT_ID     = local.project_id
+
+    # Vem de outros examples (hyper-agent / github-actions-wif) ou do Agent Engine:
+    # placeholders ficticios, troque pelos valores reais (nova versao da secret).
+    HYPER_FIRESTORE_PROJECT_ID  = local.project_id
+    HYPER_FIRESTORE_DATABASE_ID = "hyper-project-db-native"
+    IDENTITY_POOL               = "TROQUE-PELO-WORKLOAD-IDENTITY-PROVIDER"
+    IDENTITY_SA                 = "TROQUE-PELA-SA-DO-DEPLOYER"
+    RESOURCE_ID                 = "TROQUE-PELO-RESOURCE-ID-DO-AGENT-ENGINE"
   }
 
   secret      = module.secrets.secret_names[each.key]
@@ -113,13 +144,10 @@ module "app" {
     "roles/cloudsql.client",
   ]
 
-  env_vars = {
-    GOOGLE_CLIENT_ID = var.google_client_id
-    NEXTAUTH_URL     = local.cloud_run_url
-  }
+  env_vars = local.app_env_vars
 
-  # nome da secret == nome da env var nesse setup, entao o mapa inteiro serve direto
-  secret_env_vars = module.secrets.secret_ids
+  # nome da secret == nome da env var; exclui as que ja vao como env comum (Cloud Run rejeita nome duplicado)
+  secret_env_vars = { for k, v in module.secrets.secret_ids : k => v if !contains(keys(local.app_env_vars), k) }
 
   depends_on = [google_secret_manager_secret_version.values]
 }

@@ -1,9 +1,27 @@
+# SMTP_PASSWORD real NAO da pra automatizar via Terraform -- e a senha de app
+# do Gmail usado como fallback de e-mail. O default abaixo e FICTICIO, so pra
+# o apply rodar de ponta a ponta; sobrescreva num terraform.tfvars (ja e
+# ignorado pelo git), sem editar o default aqui:
+#   smtp_password = "<senha de app real>"
+variable "smtp_password" {
+  description = "Senha de app SMTP (Gmail) usada pelo Cloud Run 2 pro fallback de e-mail."
+  type        = string
+  default     = "TROQUE-PELA-SUA-SENHA-DE-APP"
+  sensitive   = true
+}
+
 locals {
   project_id = "estudos-jean-pereira"
   region     = "us-central1"
 
   firestore_database_id = "hyper-project-db-native"
   staging_bucket_name   = "${local.project_id}-agent-engine-staging"
+
+  # Formato deterministico do email de SA do GCP -- usado pra injetar a
+  # propria SA do gatilho_scheduler como env var nele mesmo (referenciar
+  # module.gatilho_scheduler dentro do proprio bloco do modulo criaria uma
+  # dependencia circular).
+  gatilho_scheduler_sa_email = "hyper-agent-gatilho-scheduler@${local.project_id}.iam.gserviceaccount.com"
 }
 
 # Discovery Engine e uma API consumida diretamente pela aplicacao (telemetria
@@ -12,6 +30,60 @@ resource "google_project_service" "discovery_engine" {
   project            = local.project_id
   service            = "discoveryengine.googleapis.com"
   disable_on_destroy = false
+}
+
+# Cloud Build: o deploy.yml do hyper-agent builda as imagens dos Cloud Run com
+# `gcloud builds submit`.
+resource "google_project_service" "cloud_build" {
+  project            = local.project_id
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+}
+
+module "registry" {
+  source     = "../../modules/artifact-registry" # Aponta para a pasta local do módulo
+  project_id = local.project_id
+  location   = local.region
+
+  repository_id = "hyper-agent"
+  description   = "Imagens dos 2 Cloud Run do hyper-agent"
+}
+
+module "secrets" {
+  source     = "../../modules/secret-manager" # Aponta para a pasta local do módulo
+  project_id = local.project_id
+
+  secret_ids = ["SMTP_PASSWORD"]
+}
+
+resource "google_secret_manager_secret_version" "smtp_password" {
+  secret      = module.secrets.secret_names["SMTP_PASSWORD"]
+  secret_data = var.smtp_password
+}
+
+# CI/CD (GitHub Actions do repo gentrop-cloud/hyper-agent) autentica via WIF,
+# sem chave de service account. Ver DEPLOY.md nesse repo pra saber onde cada
+# output abaixo entra nos Secrets/Variables do GitHub.
+module "github_wif" {
+  source     = "../../modules/workload-identity" # Aponta para a pasta local do módulo
+  project_id = local.project_id
+
+  pool_id     = "hyper-agent-gh-pool"
+  provider_id = "hyper-agent-gh-provider"
+
+  attribute_condition = "attribute.repository == 'gentrop-cloud/hyper-agent'"
+  github_repositories = ["gentrop-cloud/hyper-agent"]
+
+  service_account_id = "hyper-agent-gh-deployer"
+  service_account_roles = [
+    "roles/run.admin",               # deploy das revisions do Cloud Run
+    "roles/artifactregistry.writer", # push de imagem
+    "roles/iam.serviceAccountUser",  # deploy age como a SA de runtime de cada servico
+    "roles/aiplatform.user",         # agent_engines.update no Reasoning Engine
+    "roles/storage.admin",           # staging do Agent Engine + bucket <projeto>_cloudbuild (precisa de buckets.get)
+    "roles/cloudbuild.builds.editor",          # gcloud builds submit
+    "roles/serviceusage.serviceUsageConsumer", # checado pelo gcloud builds submit
+  ]
 }
 
 module "firestore" {
@@ -80,21 +152,32 @@ module "mensagens_chat" {
     "roles/datastore.user",
     "roles/bigquery.dataEditor",
     "roles/aiplatform.user",
+    "roles/secretmanager.secretAccessor",
   ]
 
   # Precisa ficar publico: o webhook do Google Chat nao assina as requisicoes
   # como OIDC do Cloud Run (a app valida o bearer token do Chat no codigo).
   allow_unauthenticated = true
 
+  # Nomes tem que bater com os `os.environ[...]`/`os.environ.get(...)` lidos
+  # em cloud_run/hyper-agent-mensagens-chat/main.py.
   env_vars = merge(
     {
-      FIRESTORE_DATABASE_ID = local.firestore_database_id
-      BIGQUERY_DATASET      = module.auditoria.dataset_id
+      GOOGLE_CLOUD_PROJECT  = local.project_id
+      GOOGLE_CLOUD_LOCATION = local.region
+      SMTP_EMAIL            = "automacao@gentrop.com"
     },
-    length(module.agent_engine) > 0 ? { REASONING_ENGINE_NAME = module.agent_engine[0].reasoning_engine_name } : {}
+    # REASONING_ENGINE_ID e obrigatorio no codigo (sem default) -- so define
+    # a env var quando o modulo do Agent Engine estiver ligado (count = 1),
+    # senao o container nem sobe.
+    length(module.agent_engine) > 0 ? { REASONING_ENGINE_ID = module.agent_engine[0].reasoning_engine_name } : {}
   )
 
-  depends_on = [module.firestore]
+  secret_env_vars = {
+    SMTP_PASSWORD = module.secrets.secret_ids["SMTP_PASSWORD"]
+  }
+
+  depends_on = [module.firestore, google_secret_manager_secret_version.smtp_password]
 }
 
 # Cloud Tasks distribui as chamadas 1 a 1 pro Cloud Run #2, autenticado via
@@ -135,10 +218,18 @@ module "gatilho_scheduler" {
     "serviceAccount:${module.disparo_14h.service_account_email}",
   ]
 
+  # Nomes tem que bater com os `os.environ.get(...)` lidos em
+  # cloud_run/hyper-agent-gatilho-scheduler/main.py. PILOT_WHITELIST fica de
+  # fora de proposito (sem default aqui) -- defina como variable separada se
+  # quiser popular a whitelist via Terraform; sem ela, ENABLE_WHITELIST=true
+  # (default do codigo) bloqueia todo mundo, que e o lado seguro.
   env_vars = {
-    FIRESTORE_DATABASE_ID = local.firestore_database_id
-    CLOUD_TASKS_QUEUE_ID  = module.fila_disparos.queue_id
-    CLOUD_RUN_TARGET_URL  = module.mensagens_chat.service_url
+    PROJECT_ID       = local.project_id
+    LOCATION         = "global"
+    REGION_TASKS     = local.region
+    QUEUE_NAME       = module.fila_disparos.queue_name
+    AGENT_ENDPOINT   = module.mensagens_chat.service_url
+    SA_EMAIL_INVOKER = local.gatilho_scheduler_sa_email
   }
 
   depends_on = [module.firestore]
@@ -186,4 +277,20 @@ output "bigquery_dataset" {
 
 output "reasoning_engine_name" {
   value = length(module.agent_engine) > 0 ? module.agent_engine[0].reasoning_engine_name : null
+}
+
+output "agent_engine_staging_bucket" {
+  value = length(module.agent_engine) > 0 ? "gs://${module.agent_engine[0].staging_bucket_name}" : "gs://${local.staging_bucket_name}"
+}
+
+output "artifact_registry_url" {
+  value = module.registry.repository_url
+}
+
+output "workload_identity_provider" {
+  value = module.github_wif.workload_identity_provider
+}
+
+output "deployer_service_account_email" {
+  value = module.github_wif.service_account_email
 }

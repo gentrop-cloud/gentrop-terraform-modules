@@ -1,54 +1,176 @@
 # samples
 
-Bancada de teste dos módulos de [`modules/`](../modules). Cada pasta é uma
-configuração Terraform pequena e standalone, que chama um ou mais módulos pelo caminho
-local (`../../modules/<m>`) para ver o módulo funcionando de verdade num projeto GCP,
-antes de ele ir para as stacks do manager ou para uma tag usada em `projects/`.
+Configurações Terraform de teste dos módulos de [`modules/`](../modules). Cada sample
+é uma configuração pequena e independente, que chama um ou mais módulos pelo caminho
+local para validar o seu funcionamento em um projeto GCP real antes que uma alteração
+seja publicada em uma nova versão.
 
-O que um sample **não** é: infra de produção. Ele não tem state remoto (o
-`terraform.tfstate` fica na pasta, ignorado pelo git), não roda no CI e pode ser
-destruído a qualquer momento. Infra que precisa ficar de pé vai para
-[`projects/`](../projects), incluindo as [stacks do manager](../projects/geapp-manager/prod/stacks).
+## Sumário
 
-## Para que serve
+1. [Finalidade](#1-finalidade)
+2. [O que um sample não é](#2-o-que-um-sample-não-é)
+3. [Características](#3-características)
+4. [Catálogo](#4-catálogo)
+5. [Pré-requisitos](#5-pré-requisitos)
+6. [Ciclo de uso](#6-ciclo-de-uso)
+7. [Validação de uma alteração em módulo](#7-validação-de-uma-alteração-em-módulo)
+8. [Criação de um novo sample](#8-criação-de-um-novo-sample)
+9. [Observações por sample](#9-observações-por-sample)
+10. [Pontos de atenção](#10-pontos-de-atenção)
 
-- Testar uma mudança num módulo antes do PR (o sample usa o código local, não a tag).
-- Ver um exemplo de uso de cada módulo, com as variáveis mínimas preenchidas.
-- Ponto de partida para montar uma stack nova em `projects/`: copie o sample e troque
-  o `source` para a tag.
+## 1. Finalidade
 
-## Como usar
+Os samples atendem a três objetivos:
 
-1. Abra o `main.tf` do sample e troque o `project_id` pelo projeto de teste (os
-   samples vêm com `estudos-jean-pereira`).
-2. `gcloud auth application-default login`
-3. `terraform init` e `terraform apply` na pasta do sample.
-4. Terminou o teste: `terraform destroy`.
+- **Validação.** Testar uma alteração em um módulo com o código local, antes do Pull
+  Request e da publicação da tag.
+- **Referência de uso.** Demonstrar cada módulo com as variáveis mínimas preenchidas,
+  servindo de exemplo para novos consumidores.
+- **Ponto de partida.** Servir de base para uma nova stack em `projects/`: basta
+  copiar o sample, ajustar o projeto e trocar a referência dos módulos para a tag
+  vigente.
 
-Cada sample tem um README com o passo a passo e o que conferir depois do apply.
+## 2. O que um sample não é
 
-## Samples
+Um sample **não é infraestrutura produtiva**. Ele não possui state remoto, não é
+executado por pipeline e pode ser destruído a qualquer momento. Infraestrutura que
+precisa permanecer em operação deve ser declarada em [`projects/`](../projects), com
+state remoto e revisão por Pull Request.
 
-Um por módulo, com o mesmo nome da pasta em `modules/`:
+## 3. Características
 
-- [`artifact-registry`](artifact-registry) — só o repositório
-- [`secret-manager`](secret-manager) — só os secrets
-- [`cloud-run`](cloud-run) — só o Cloud Run (imagem placeholder)
-- [`cloud-sql`](cloud-sql) — só o Cloud SQL (módulo `cloud-sql-postgress`)
-- [`firestore-database`](firestore-database) — só o Firestore
-- [`bigquery-dataset`](bigquery-dataset) — só o BigQuery
-- [`cloud-tasks-queue`](cloud-tasks-queue) — só a fila de Cloud Tasks
-- [`cloud-scheduler-http`](cloud-scheduler-http) — só o job de Cloud Scheduler
-- [`vertex-ai-agent-engine`](vertex-ai-agent-engine) — só o Vertex AI Agent Engine
-- [`github-actions-wif`](github-actions-wif) — WIF pra GitHub Actions (módulo
-  `workload-identity`)
+| Aspecto | Comportamento |
+| --- | --- |
+| Referência aos módulos | Caminho local (`../../modules/<módulo>`), sempre com o código da cópia de trabalho |
+| State | Local (`terraform.tfstate` na pasta), excluído do Git pelo `.gitignore` |
+| Backend | Nenhum |
+| Projeto de destino | Definido no `main.tf` de cada sample (projeto de teste `estudos-jean-pereira` por padrão) |
+| Execução | Manual, por um desenvolvedor |
+| Documentação | `README.md` próprio, com o passo a passo e o que conferir após o `apply` |
+| Nome | Igual ao do módulo testado, quando o sample cobre um único módulo |
 
-Combinações de módulos já conectados entre si:
+## 4. Catálogo
 
-- [`artifact-registry-secret-manager-cloud-run`](artifact-registry-secret-manager-cloud-run) —
-  registry + secrets + Cloud SQL + Cloud Run. **Atenção:** aponta para
-  `geapp-gentrop-prod-0001`, cuja infra hoje é gerida por
-  [`projects/geapp/prod/app`](../projects/geapp/prod/app). Não rode `apply` nele com
-  esse `project_id`.
-- [`hyper-agent`](hyper-agent) — Cloud Scheduler + Cloud Tasks + 2 Cloud Run +
-  Firestore + BigQuery + Vertex AI Agent Engine
+### 4.1 Samples de um módulo
+
+| Sample | Módulo testado | Outputs |
+| --- | --- | --- |
+| [`artifact-registry`](artifact-registry) | `artifact-registry` | `repository_url` |
+| [`bigquery-dataset`](bigquery-dataset) | `bigquery-dataset` | `dataset_id`, `table_ids` |
+| [`cloud-run`](cloud-run) | `cloud-run` (imagem pública de exemplo) | `service_url` |
+| [`cloud-scheduler-http`](cloud-scheduler-http) | `cloud-scheduler-http` | `service_account_email` |
+| [`cloud-sql`](cloud-sql) | `cloud-sql-postgress` | — |
+| [`cloud-tasks-queue`](cloud-tasks-queue) | `cloud-tasks-queue` | `queue_id` |
+| [`firestore-database`](firestore-database) | `firestore-database` | `database_name` |
+| [`github-actions-wif`](github-actions-wif) | `workload-identity` | `workload_identity_provider`, `service_account_email` |
+| [`secret-manager`](secret-manager) | `secret-manager` | `secret_ids` |
+| [`vertex-ai-agent-engine`](vertex-ai-agent-engine) | `vertex-ai-agent-engine` | `reasoning_engine_name`, `staging_bucket_name` |
+
+### 4.2 Samples de composição
+
+Combinam vários módulos já conectados entre si, reproduzindo uma arquitetura completa.
+
+| Sample | Módulos | Arquitetura |
+| --- | --- | --- |
+| [`artifact-registry-secret-manager-cloud-run`](artifact-registry-secret-manager-cloud-run) | `artifact-registry`, `secret-manager`, `cloud-sql-postgress`, `cloud-run` | Aplicação web com registro de imagens, segredos, banco PostgreSQL e serviço Cloud Run |
+| [`hyper-agent`](hyper-agent) | `artifact-registry`, `secret-manager`, `workload-identity`, `firestore-database`, `bigquery-dataset`, `vertex-ai-agent-engine`, `cloud-run` (2), `cloud-tasks-queue`, `cloud-scheduler-http` (2) | Sistema multiagente com agendamentos, fila de disparos, dois serviços Cloud Run, Firestore, BigQuery e Vertex AI Agent Engine |
+
+## 5. Pré-requisitos
+
+| Requisito | Detalhe |
+| --- | --- |
+| Terraform | 1.5 ou superior (o `cloud-sql-postgress` aceita a partir de 1.3) |
+| Google Cloud CLI | Autenticado com credenciais de aplicação (`gcloud auth application-default login`) |
+| Projeto de teste | Projeto GCP com faturamento ativo e permissões suficientes para criar os recursos do sample |
+| Valores manuais | Alguns samples exigem valores em `terraform.tfvars` (ver [seção 9](#9-observações-por-sample)) |
+
+## 6. Ciclo de uso
+
+1. **Configuração.** Abra o `main.tf` do sample e defina o `project_id` do projeto de
+   teste.
+2. **Autenticação.**
+   ```bash
+   gcloud auth application-default login
+   gcloud config set project <project-id>
+   ```
+3. **Inicialização e plano.**
+   ```bash
+   terraform init
+   terraform plan
+   ```
+4. **Aplicação.**
+   ```bash
+   terraform apply
+   ```
+5. **Verificação.** Confira os outputs e o comportamento descrito no README do
+   sample.
+6. **Remoção.** Ao final do teste, remova os recursos para evitar custos:
+   ```bash
+   terraform destroy
+   ```
+
+## 7. Validação de uma alteração em módulo
+
+1. Altere o módulo em `modules/<módulo>/`.
+2. No sample correspondente, execute `terraform fmt -recursive`, `terraform init` e
+   `terraform validate`.
+3. Execute `terraform plan` e confirme que a diferença corresponde exatamente à
+   alteração pretendida.
+4. Execute `terraform apply` no projeto de teste e verifique o comportamento.
+5. Quando a alteração afetar consumidores existentes, aplique-a antes sobre um state
+   criado com o código anterior do módulo, para confirmar que não há recriação de
+   recursos.
+6. Execute `terraform destroy` e registre o resultado no Pull Request.
+
+## 8. Criação de um novo sample
+
+1. Crie `samples/<módulo>/` com o mesmo nome do módulo testado.
+2. Inclua um `main.tf` que chame o módulo por `../../modules/<módulo>`, com as
+   variáveis mínimas e os outputs necessários para a verificação.
+3. Não declare backend: o state deve permanecer local.
+4. Documente no `README.md` do sample o passo a passo e o que conferir após o
+   `apply`.
+5. Inclua o sample no [catálogo](#4-catálogo) deste documento e na tabela de módulos
+   de [`modules/README.md`](../modules/README.md).
+
+## 9. Observações por sample
+
+| Sample | Observação |
+| --- | --- |
+| `artifact-registry-secret-manager-cloud-run` | **Aponta para `geapp-gentrop-prod-0001`**, cuja infraestrutura é gerida por [`projects/geapp/prod/app`](../projects/geapp/prod/app). Não execute `apply` com esse `project_id`; para testes, troque-o pelo projeto de teste. Exige `google_client_id` e `google_client_secret` em `terraform.tfvars`. |
+| `cloud-sql` | A instância nasce com `deletion_protection = true`. Para destruir, defina `deletion_protection = false`, execute `terraform apply` e só então `terraform destroy`. |
+| `firestore-database` | Com `deletion_policy = ABANDON`, o `destroy` remove o banco apenas do state, sem excluí-lo do projeto. |
+| `github-actions-wif` | O `project_id` é uma variável sem valor padrão; informe-o com `-var project_id=<project-id>` ou em `terraform.tfvars`. |
+| `hyper-agent` | Exige `smtp_password` em `terraform.tfvars`. O módulo do Agent Engine está versionado com `count = 0` (ver a observação abaixo). |
+| `vertex-ai-agent-engine` | O módulo está versionado com `count = 0`. Nesse estado, nenhum recurso do módulo é criado, inclusive o bucket de staging, apesar do comentário no `main.tf` indicar o contrário. |
+
+Para testar o Agent Engine nos samples `vertex-ai-agent-engine` e `hyper-agent`:
+
+1. Altere `count = 0` para `count = 1` no bloco do módulo.
+2. Crie apenas o bucket de staging:
+   ```bash
+   terraform apply -target='module.<nome-do-módulo>[0].google_storage_bucket.staging'
+   ```
+3. Publique um pacote do agente no bucket (por exemplo, o pacote provisório do
+   repositório `hyper-agent`).
+4. Execute o `terraform apply` completo.
+
+Alternativamente, o módulo aceita `create_reasoning_engine = false`, que cria a conta,
+o bucket e as APIs sem o Reasoning Engine.
+
+## 10. Pontos de atenção
+
+- **Custos.** Os samples criam recursos reais e faturáveis (por exemplo, instâncias do
+  Cloud SQL e serviços do Vertex AI). Execute `terraform destroy` ao final de cada
+  teste.
+- **State local.** O `terraform.tfstate` de um sample existe apenas na máquina de quem
+  o aplicou. Não o versione, não o compartilhe e não o reutilize em uma stack de
+  `projects/`, exceto em uma migração planejada com `terraform init -migrate-state`.
+- **Renomeação de pastas.** Arquivos ignorados pelo Git, como o state local e a pasta
+  `.terraform/`, não acompanham uma renomeação de pasta feita pelo Git. Mova-os
+  manualmente para o novo caminho antes de executar o Terraform.
+- **Projeto de teste.** Nunca aponte um sample para um projeto produtivo. O state local
+  não conhece os recursos geridos por outras stacks: um `apply` pode conflitar com
+  recursos de mesmo nome ou alterar a configuração deles, e o `destroy` de um vínculo
+  de IAM idêntico a outro declarado em uma stack produtiva remove o vínculo para
+  ambas.

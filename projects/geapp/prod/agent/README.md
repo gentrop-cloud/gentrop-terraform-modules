@@ -143,38 +143,56 @@ stack `app`. Ele não deve ser alterado nem reutilizado.
 
 ## 8. Primeira aplicação
 
-Em um projeto em que o hyper-agent ainda não existe, o Reasoning Engine depende de um
-pacote no bucket de staging, e o bucket é criado pela própria stack. A primeira
-aplicação segue, portanto, a ordem definida no `DEPLOY.md` do repositório
-`hyper-agent`:
+Em um projeto em que o hyper-agent ainda não existe, a criação envolve duas
+dependências encadeadas:
 
-1. **Infraestrutura sem o Agent Engine.** Em `main.tf`, altere temporariamente
-   `count = 1` para `count = 0` no módulo `agent_engine` e execute:
+- o Reasoning Engine só pode ser criado quando já existe um pacote do agente no
+  bucket de staging, e esse bucket é criado pela própria stack;
+- o Cloud Run de mensagens recebe `REASONING_ENGINE_ID` apenas na sua criação, pois
+  o módulo `cloud-run` ignora alterações de variáveis de ambiente em serviços
+  existentes. Por isso, o Reasoning Engine precisa existir antes do Cloud Run de
+  mensagens.
+
+A sequência abaixo atende às duas condições sem alterar arquivos:
+
+1. **Bucket de staging.** Crie apenas o bucket (e as suas dependências):
    ```bash
    terraform init
-   terraform plan
-   terraform apply
+   terraform apply -target='module.agent_engine[0].google_storage_bucket.staging'
    ```
-   Revise o `plan`: devem existir apenas operações de criação. Não copie o state de
-   `samples/hyper-agent`, que pertence a outro projeto.
-2. **Credenciais do CI/CD.** Cadastre os outputs `workload_identity_provider` e
-   `deployer_service_account_email` no repositório `hyper-agent` (ver
-   [seção 9](#9-integração-com-o-cicd-do-hyper-agent)).
-3. **Pacote provisório do agente.** No repositório `hyper-agent`, autenticado neste
-   projeto, publique um pacote provisório no bucket de staging:
+   Não copie o state de `samples/hyper-agent`, que pertence a outro projeto.
+2. **Pacote provisório do agente.** No repositório `hyper-agent`, autenticado neste
+   projeto, publique um pacote provisório no bucket:
    ```bash
    STAGING_BUCKET=gs://geapp-gentrop-prod-0001-agent-engine-staging python -m scripts.bootstrap_agent_engine_placeholder
    ```
-4. **Agent Engine.** Restaure `count = 1` e execute `terraform apply`. O Reasoning
-   Engine é criado e `REASONING_ENGINE_ID` passa a ser definido no Cloud Run de
-   mensagens. Cadastre o output `reasoning_engine_name` no repositório `hyper-agent`.
+3. **Demais recursos.** Execute o `apply` completo:
+   ```bash
+   terraform plan
+   terraform apply
+   ```
+   Revise o `plan`: devem existir apenas operações de criação. O Reasoning Engine é
+   criado antes do Cloud Run de mensagens, que já nasce com `REASONING_ENGINE_ID`.
+4. **Credenciais do CI/CD.** Cadastre os outputs no repositório `hyper-agent` (ver
+   [seção 9](#9-integração-com-o-cicd-do-hyper-agent)).
 5. **Versão real do agente.** A partir daí, cada push na `main` do `hyper-agent` que
    altere os agentes publica a versão real por `agent_engines.update`, substituindo o
-   pacote provisório. O módulo ignora alterações na especificação do Reasoning Engine,
-   de modo que o `apply` não reverte a publicação.
+   pacote provisório. O módulo ignora alterações na especificação do Reasoning
+   Engine, de modo que o `apply` não reverte a publicação.
+
+O procedimento do `DEPLOY.md` do `hyper-agent` e o comentário do módulo `agent_engine`
+no `main.tf` sugerem `count = 0` na primeira etapa. Esse caminho não funciona em um
+projeto vazio: com `count = 0` no bloco do módulo, nem o bucket de staging é criado, e,
+quando o `count` volta a `1`, o Cloud Run de mensagens já existente não recebe
+`REASONING_ENGINE_ID`.
 
 Em um projeto em que o Reasoning Engine já existe, basta `terraform init` e
-`terraform plan`, que deve indicar **No changes**.
+`terraform plan`, que deve indicar **No changes**. Para confirmar que o Cloud Run de
+mensagens recebeu a variável:
+
+```bash
+gcloud run services describe hyper-agent-mensagens-chat --project=geapp-gentrop-prod-0001 --region=us-central1 --format="value(spec.template.spec.containers[0].env)"
+```
 
 ## 9. Integração com o CI/CD do hyper-agent
 
@@ -187,7 +205,7 @@ repositório:
 | --- | --- | --- |
 | Secret | `WORKLOAD_IDENTITY_PROVIDER` | Output `workload_identity_provider` |
 | Secret | `DEPLOYER_SA_EMAIL` | Output `deployer_service_account_email` |
-| Secret | `REASONING_ENGINE_NAME` | Output `reasoning_engine_name` (após a etapa 4 da seção 8) |
+| Secret | `REASONING_ENGINE_NAME` | Output `reasoning_engine_name` (após a etapa 3 da seção 8) |
 | Variable | `GCP_PROJECT_ID` | `geapp-gentrop-prod-0001` |
 | Variable | `GCP_REGION` | `us-central1` |
 | Variable | `ARTIFACT_REGISTRY_REPO` | `hyper-agent` |

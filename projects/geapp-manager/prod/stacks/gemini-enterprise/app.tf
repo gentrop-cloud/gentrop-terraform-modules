@@ -22,7 +22,7 @@ locals {
 # Sem env vars: quem as aplica e o cloudbuild.yaml do app, no deploy (ADR 0009
 # do geapp-manager), e o modulo ignora env depois da criacao.
 module "app_run" {
-  source     = "../../../../modules/cloud-run"
+  source     = "../../../../../modules/cloud-run"
   project_id = var.project_id
   location   = var.region
 
@@ -48,7 +48,7 @@ check "app_secrets" {
 # sink abaixo cria a partir dos logs do Gemini Enterprise. O log de atividade
 # precisa estar ligado na configuracao do app no Gemini Enterprise.
 module "atividade_ge" {
-  source     = "../../../../modules/bigquery-dataset"
+  source     = "../../../../../modules/bigquery-dataset"
   project_id = var.project_id
 
   dataset_id                 = "gemini_enterprise_atividade"
@@ -84,7 +84,7 @@ resource "google_project_service" "app" {
 }
 
 module "app_registry" {
-  source     = "../../../../modules/artifact-registry"
+  source     = "../../../../../modules/artifact-registry"
   project_id = var.project_id
   location   = var.region
 
@@ -130,7 +130,7 @@ resource "random_password" "db_admin" {
 }
 
 module "db" {
-  source     = "../../../../modules/cloud-sql-postgress"
+  source     = "../../../../../modules/cloud-sql-postgress"
   project_id = var.project_id
   region     = var.region
 

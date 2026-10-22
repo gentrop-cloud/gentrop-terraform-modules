@@ -84,7 +84,7 @@ recebe.
 4. Em cada uma dessas pastas: `terraform init -upgrade`, `terraform plan` e
    `terraform apply`.
 
-O projeto que continuar no `?ref=v1.0.0` não muda. As [stacks do manager](../projects/geapp-manager/stacks)
+O projeto que continuar no `?ref=v1.0.0` não muda. As [stacks do manager](../projects/geapp-manager/prod/stacks)
 usam o caminho local e recebem a mudança no próximo run, sem tag: por isso a regra
 abaixo, de deixar o comportamento antigo como default.
 

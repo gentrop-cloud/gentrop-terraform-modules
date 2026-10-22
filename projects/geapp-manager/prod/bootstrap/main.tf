@@ -53,7 +53,7 @@ resource "google_project_service" "control" {
 # Pool proprio: nao reaproveita o github-actions-pool / github-deployer do
 # samples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
 module "wif" {
-  source = "../../../modules/workload-identity"
+  source = "../../../../modules/workload-identity"
 
   project_id  = var.control_project_id
   pool_id     = "github-terraform"
@@ -128,7 +128,7 @@ output "cloudbuild_github_token_secret" {
 
 # Pool separado do github-terraform: a confianca nos apps nao alcanca a geapp-seed-sa.
 module "release_wif" {
-  source = "../../../modules/workload-identity"
+  source = "../../../../modules/workload-identity"
 
   project_id  = var.control_project_id
   pool_id     = "github-releases"

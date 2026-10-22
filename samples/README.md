@@ -8,7 +8,7 @@ antes de ele ir para as stacks do manager ou para uma tag usada em `projects/`.
 O que um sample **não** é: infra de produção. Ele não tem state remoto (o
 `terraform.tfstate` fica na pasta, ignorado pelo git), não roda no CI e pode ser
 destruído a qualquer momento. Infra que precisa ficar de pé vai para
-[`projects/`](../projects), incluindo as [stacks do manager](../projects/geapp-manager/stacks).
+[`projects/`](../projects), incluindo as [stacks do manager](../projects/geapp-manager/prod/stacks).
 
 ## Para que serve
 

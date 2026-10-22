@@ -4,7 +4,7 @@ Duas contas, cada uma com uma responsabilidade:
 
 | Conta | Onde mora | O que faz |
 | --- | --- | --- |
-| `geapp-seed-sa` | só no `geapp-prod-seed-0001` | cria o projeto do cliente e, dentro dele, a `tf-provisioner` (`projects/geapp-manager/stacks/project`) |
+| `geapp-seed-sa` | só no `geapp-prod-seed-0001` | cria o projeto do cliente e, dentro dele, a `tf-provisioner` (`projects/geapp-manager/prod/stacks/project`) |
 | `tf-provisioner` | uma em cada projeto de cliente | provisiona os serviços do próprio projeto (demais stacks) |
 
 O `provision.yml` escolhe a conta pelo stack: `project` roda como a
@@ -20,7 +20,7 @@ ao faturamento:
 - na **conta de faturamento** dos clientes: `roles/billing.user`.
 
 Os papéis da `tf-provisioner` não passam pelo admin: o stack `project` concede no
-próprio projeto (`tf_provisioner_roles` em `projects/geapp-manager/stacks/project/main.tf`).
+próprio projeto (`tf_provisioner_roles` em `projects/geapp-manager/prod/stacks/project/main.tf`).
 
 ## 2. Estado atual: WIF no prod, `geapp-seed-sa` configurada à mão
 

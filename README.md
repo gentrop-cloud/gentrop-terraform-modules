@@ -5,8 +5,10 @@ Repositório de infraestrutura da Gentrop no Google Cloud, em Terraform. Ele gua
 - os **módulos** reutilizáveis (Cloud Run, Cloud SQL, Artifact Registry, Secret
   Manager, Workload Identity, Cloud Scheduler, Cloud Tasks, Firestore, BigQuery,
   Vertex AI Agent Engine);
-- o **geapp-manager**: as stacks que o manager aplica para cada cliente, o bootstrap
-  e o script de log do pipeline;
+- o **geapp-manager**: as stacks que o
+  [GeApp Manager](https://github.com/gentrop-cloud/gentrop-geapp-manager) aplica para
+  cada cliente, o bootstrap e o script de log do pipeline (ver
+  [`projects/geapp-manager/README.md`](projects/geapp-manager/README.md));
 - os **projetos** aplicados à mão, fora do manager (ex.: geapp prod);
 - os **samples** usados para testar cada módulo isolado.
 
@@ -19,12 +21,13 @@ em qual projeto GCP e em qual state eles rodam.
 modules/                  # módulos reutilizáveis, versionados por tag vX.Y.Z (ver modules/README.md)
 samples/                  # bancada de teste dos módulos: source local, state local, sem CI (ver samples/README.md)
 projects/
-  geapp-manager/prod/     # tudo que o geapp-manager de prod usa para provisionar clientes
-    stacks/               #   stacks genéricas, uma por cliente, rodadas pelo provision.yml
-      project/            #     cria o projeto GCP do cliente e a SA tf-provisioner
-      gemini-enterprise/  #     app + hyper-agent + Cloud Build do cliente
-    bootstrap/            #   setup único do provisionamento (WIF, SAs), aplicado à mão
-    scripts/              #   log-stream.sh: envia o log do run ao manager
+  geapp-manager/          # infra do GeApp Manager (ver projects/geapp-manager/README.md)
+    prod/
+      stacks/             #   stacks genéricas, uma por cliente, rodadas pelo provision.yml
+        project/          #     cria o projeto GCP do cliente e a SA tf-provisioner
+        gemini-enterprise/ #    app + hyper-agent + Cloud Build do cliente
+      bootstrap/          #   setup único: WIF do GitHub, acesso ao state, releases; aplicado à mão
+      scripts/            #   log-stream.sh: envia o log do run ao manager
   <projeto>/<ambiente>/<stack>/   # infra fora do manager, aplicada à mão
     geapp/prod/app/       #   app geapp (Cloud Run + Cloud SQL + secrets)
     geapp/prod/agent/     #   hyper-agent do geapp (Scheduler, Tasks, Firestore, BigQuery, Agent Engine)

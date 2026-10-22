@@ -1,8 +1,8 @@
-# Cliente geapp-prod (projeto `geapp-gentrop-prod-0001`)
+# Projeto geapp-prod (GCP `geapp-gentrop-prod-0001`)
 
-Uma pasta por cliente/ambiente: cada uma tem o proprio `project_id` (em `main.tf`)
-e o proprio state remoto (`prefix` em `versions.tf`). Para um novo cliente/ambiente/stack, copie
-esta pasta para `clientes/<cliente>/<ambiente>/<stack>`, troque `project_id`, `prefix`
+Uma pasta por projeto/ambiente: cada uma tem o proprio `project_id` (em `main.tf`)
+e o proprio state remoto (`prefix` em `versions.tf`). Para um novo projeto/ambiente/stack, copie
+esta pasta para `projetos/<projeto>/<ambiente>/<stack>`, troque `project_id`, `prefix`
 e rode `terraform init`.
 
 Regra: nunca troque o `project_id` de uma pasta ja aplicada -- crie outra pasta.

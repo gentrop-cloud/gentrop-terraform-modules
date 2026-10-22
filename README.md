@@ -9,12 +9,12 @@ Cloud SQL, Artifact Registry, Secret Manager, Workload Identity Federation).
 modules/                         # módulos reutilizáveis, versionados por tag vX.Y.Z
 examples/                        # bancada de teste dos módulos (source local, sem state remoto, sem CI)
 stacks/ + bootstrap/             # stacks genéricas aplicadas pelo geapp-portal (provision.yml)
-clientes/<cliente>/<ambiente>/<stack>/   # infra fora do portal, aplicada à mão: 1 pasta = 1 state
-  ex.: clientes/geapp/prod/app, clientes/geapp/prod/hyper-agent
+projetos/<projeto>/<ambiente>/<stack>/   # infra fora do portal, aplicada à mão: 1 pasta = 1 state
+  ex.: projetos/geapp/prod/app, projetos/geapp/prod/hyper-agent
 ```
 
 As stacks de `stacks/` usam `../../modules` (o portal sempre roda a `main`). As de
-`clientes/` usam o módulo por tag, não pelo caminho local:
+`projetos/` usam o módulo por tag, não pelo caminho local:
 
 ```hcl
 source = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/cloud-run?ref=v1.0.0"
@@ -24,16 +24,16 @@ Assim uma mudança em `modules/` só chega num projeto quando você sobe o `ref`
 
 ## Fluxo de manutenção
 
-- **Mudar só um projeto de `clientes/`**: edite os `.tf` da pasta da stack → PR →
+- **Mudar só um projeto**: edite os `.tf` da pasta da stack → PR →
   merge em `main` → na pasta, `terraform plan` e `terraform apply`.
 - **Mudar um módulo**: edite `modules/<m>` → teste em `examples/` → merge. Isso já
   chega em `stacks/` no próximo run do portal, então mudança que recria ou atualiza
-  recurso existente entra atrás de variável com o default antigo. Para `clientes/`:
+  recurso existente entra atrás de variável com o default antigo. Para `projetos/`:
   `git tag v1.1.0 && git push origin v1.1.0` → nas stacks que devem receber a mudança,
   troque `?ref=v1.0.0` por `?ref=v1.1.0` e rode `terraform init -upgrade`. As outras
   continuam na versão antiga.
-- **Novo projeto/ambiente em `clientes/`**: copie uma pasta de stack para
-  `clientes/<cliente>/<ambiente>/<stack>`, troque `project_id` e o `prefix` do backend
+- **Novo projeto/ambiente em `projetos/`**: copie uma pasta de stack para
+  `projetos/<projeto>/<ambiente>/<stack>`, troque `project_id` e o `prefix` do backend
   (nunca reaproveite um prefix).
 
 ## Módulos

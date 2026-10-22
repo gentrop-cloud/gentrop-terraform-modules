@@ -141,22 +141,13 @@ Combinam vários módulos já conectados entre si, reproduzindo uma arquitetura 
 | `cloud-sql` | A instância nasce com `deletion_protection = true`. Para destruir, defina `deletion_protection = false`, execute `terraform apply` e só então `terraform destroy`. |
 | `firestore-database` | Com `deletion_policy = ABANDON`, o `destroy` remove o banco apenas do state, sem excluí-lo do projeto. |
 | `github-actions-wif` | O `project_id` é uma variável sem valor padrão; informe-o com `-var project_id=<project-id>` ou em `terraform.tfvars`. |
-| `hyper-agent` | Exige `smtp_password` em `terraform.tfvars`. O módulo do Agent Engine está versionado com `count = 0` (ver a observação abaixo). |
-| `vertex-ai-agent-engine` | O módulo está versionado com `count = 0`. Nesse estado, nenhum recurso do módulo é criado, inclusive o bucket de staging, apesar do comentário no `main.tf` indicar o contrário. |
+| `hyper-agent` | Exige `smtp_password` em `terraform.tfvars`. O Reasoning Engine é criado vazio no primeiro `apply`; um state criado antes desta versão exige definir `REASONING_ENGINE_ID` manualmente no Cloud Run de mensagens (ver o [README do sample](hyper-agent/README.md)). |
+| `vertex-ai-agent-engine` | O Reasoning Engine é criado vazio, sem `package_spec`, em um único `apply`. Para criar apenas o bucket, use `create_reasoning_engine = false`. |
 
-Para testar o Agent Engine nos samples `vertex-ai-agent-engine` e `hyper-agent`:
-
-1. Altere `count = 0` para `count = 1` no bloco do módulo.
-2. Crie apenas o bucket de staging:
-   ```bash
-   terraform apply -target='module.<nome-do-módulo>[0].google_storage_bucket.staging'
-   ```
-3. Publique um pacote do agente no bucket (por exemplo, o pacote provisório do
-   repositório `hyper-agent`).
-4. Execute o `terraform apply` completo.
-
-Alternativamente, o módulo aceita `create_reasoning_engine = false`, que cria a conta,
-o bucket e as APIs sem o Reasoning Engine.
+Nos dois samples, o módulo do Agent Engine é chamado sem `package_spec`: o engine nasce
+sem código, junto com o bucket de staging, e a esteira de CI da aplicação publica o
+agente depois com `agent_engines.update`. Não é necessário publicar um pacote
+provisório antes do `apply`.
 
 ## 10. Pontos de atenção
 

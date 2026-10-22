@@ -4,14 +4,10 @@ locals {
   staging_bucket_name = "${local.project_id}-agent-engine-teste-staging"
 }
 
+# Sem package_spec: o engine nasce vazio no primeiro apply, junto com o bucket de
+# staging, e o CI da aplicacao publica o codigo depois com agent_engines.update.
+# O modulo ignora mudancas em spec, entao o apply nao reverte essa publicacao.
 module "agent_engine_teste" {
-  # count = 0 cria so a service account + bucket + habilitacao de API.
-  # O Vertex AI valida e copia os objetos do GCS na hora de criar o
-  # Reasoning Engine, entao so mude pra count = 1 depois de confirmar que
-  # agent.pkl e requirements.txt existem de verdade no bucket abaixo (veja o
-  # README desta pasta).
-  count = 0
-
   source     = "../../modules/vertex-ai-agent-engine" # Aponta para a pasta local do módulo
   project_id = local.project_id
   region     = local.region
@@ -22,17 +18,12 @@ module "agent_engine_teste" {
   service_account_roles = [
     "roles/aiplatform.user",
   ]
-
-  package_spec = {
-    pickle_object_gcs_uri = "gs://${local.staging_bucket_name}/agent.pkl"
-    requirements_gcs_uri  = "gs://${local.staging_bucket_name}/requirements.txt"
-  }
 }
 
 output "reasoning_engine_name" {
-  value = length(module.agent_engine_teste) > 0 ? module.agent_engine_teste[0].reasoning_engine_name : null
+  value = module.agent_engine_teste.reasoning_engine_name
 }
 
 output "staging_bucket_name" {
-  value = length(module.agent_engine_teste) > 0 ? module.agent_engine_teste[0].staging_bucket_name : local.staging_bucket_name
+  value = module.agent_engine_teste.staging_bucket_name
 }

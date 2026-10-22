@@ -110,15 +110,16 @@ module "auditoria" {
   location   = local.region
 }
 
-module "agent_engine" {
-  # count = 0 desliga este modulo enquanto o CI da aplicacao ainda nao subiu
-  # o bundle real (pickle + requirements.txt) pro bucket de staging -- o
-  # Vertex AI valida/copia esse objeto do GCS na hora de criar o recurso, e
-  # falha se ele nao existir. Troque pra count = 1 SO depois de confirmar
-  # (gcloud storage ls gs://<bucket>/) que agent.pkl e requirements.txt
-  # realmente estao no bucket -- ver README desta pasta.
-  count = 1
+# O modulo tinha count = 1; o moved so renomeia o endereco no state, sem recriar.
+moved {
+  from = module.agent_engine[0]
+  to   = module.agent_engine
+}
 
+# Sem package_spec: o engine nasce vazio no primeiro apply, junto com o bucket de
+# staging, e o CI do hyper-agent publica o codigo depois com agent_engines.update.
+# O modulo ignora mudancas em spec, entao o apply nao reverte essa publicacao.
+module "agent_engine" {
   source     = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/vertex-ai-agent-engine?ref=v1.0.0"
   project_id = local.project_id
   region     = local.region
@@ -134,16 +135,6 @@ module "agent_engine" {
   service_account_roles = [
     "roles/aiplatform.user",
   ]
-
-  # ATENCAO: o Vertex AI valida e copia o objeto do GCS na hora de criar o
-  # recurso -- esses URIs so funcionam depois que o CI da aplicacao subir o
-  # bundle real (pickle + requirements.txt) pro bucket de staging via Vertex
-  # AI SDK. Ate la, aplique so os outros modulos (veja o README) e deixe
-  # este bloco pra depois.
-  package_spec = {
-    pickle_object_gcs_uri = "gs://${local.staging_bucket_name}/agent.pkl"
-    requirements_gcs_uri  = "gs://${local.staging_bucket_name}/requirements.txt"
-  }
 }
 
 # Cloud Run #2 -- recebe webhooks do Google Chat (publico, verificado no
@@ -175,10 +166,10 @@ module "mensagens_chat" {
       GOOGLE_CLOUD_LOCATION = local.region
       SMTP_EMAIL            = "automacao@gentrop.com"
     },
-    # REASONING_ENGINE_ID e obrigatorio no codigo (sem default) -- so define
-    # a env var quando o modulo do Agent Engine estiver ligado (count = 1),
-    # senao o container nem sobe.
-    length(module.agent_engine) > 0 ? { REASONING_ENGINE_ID = module.agent_engine[0].reasoning_engine_name } : {}
+    # REASONING_ENGINE_ID e obrigatorio no codigo (sem default). O engine e criado
+    # antes deste servico, que ja nasce com o valor: o modulo cloud-run ignora
+    # mudancas de env depois da criacao.
+    { REASONING_ENGINE_ID = module.agent_engine.reasoning_engine_name }
   )
 
   secret_env_vars = {
@@ -284,11 +275,11 @@ output "bigquery_dataset" {
 }
 
 output "reasoning_engine_name" {
-  value = length(module.agent_engine) > 0 ? module.agent_engine[0].reasoning_engine_name : null
+  value = module.agent_engine.reasoning_engine_name
 }
 
 output "agent_engine_staging_bucket" {
-  value = length(module.agent_engine) > 0 ? "gs://${module.agent_engine[0].staging_bucket_name}" : "gs://${local.staging_bucket_name}"
+  value = "gs://${module.agent_engine.staging_bucket_name}"
 }
 
 output "artifact_registry_url" {

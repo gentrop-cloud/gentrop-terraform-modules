@@ -1,42 +1,52 @@
-# Exemplo: Vertex AI Agent Engine
+# Sample: Vertex AI Agent Engine
 
-Sobe um Reasoning Engine isolado usando o módulo
-[`vertex-ai-agent-engine`](../../modules/vertex-ai-agent-engine) — serve só
-pra validar o módulo sozinho.
+Configuração de teste do módulo
+[`vertex-ai-agent-engine`](../../modules/vertex-ai-agent-engine). Cria, de forma
+isolada, um Reasoning Engine do Vertex AI Agent Engine, o bucket de staging do pacote
+do agente e a conta de runtime.
 
-## Antes de aplicar
+## Recursos criados
 
-Diferente dos outros exemplos, **esse não sobe com um `terraform apply`
-direto na primeira vez**: o Vertex AI valida e copia o objeto do GCS na hora
-de criar o Reasoning Engine, então `package_spec.pickle_object_gcs_uri`
-precisa apontar pra um arquivo que já existe de verdade. O `main.tf` já vem
-com `count = 0` (desliga só o Reasoning Engine em si) pra você conseguir
-aplicar o resto de primeira.
+| Recurso | Nome |
+| --- | --- |
+| APIs | `aiplatform.googleapis.com` e `storage.googleapis.com` |
+| Conta de serviço | `vertex-agent-engine-runtime`, com `roles/aiplatform.user` |
+| Bucket de staging | `<project_id>-agent-engine-teste-staging` |
+| Reasoning Engine | `agent-engine-teste`, criado sem código |
 
-1. Abra o `main.tf` e troque `local.project_id` pelo projeto GCP de destino.
-2. Conecte com esse projeto via `gcloud`:
+## Funcionamento
+
+O módulo é chamado sem `package_spec`. Nessa configuração, o Reasoning Engine é
+criado vazio no primeiro `apply`, junto com o bucket de staging, sem exigir que um
+pacote do agente exista previamente no GCS. O código do agente é publicado depois, pela
+esteira de CI da aplicação, com `agent_engines.update`. O módulo ignora alterações na
+especificação do engine, de modo que um `apply` posterior não reverte essa publicação.
+
+## Procedimento
+
+1. Abra o `main.tf` e defina `project_id` em `locals` com o projeto de teste.
+2. Autentique-se:
    ```bash
    gcloud auth application-default login
-   gcloud config set project SEU_PROJETO_ID
+   gcloud config set project <project-id>
    ```
-3. ```bash
+3. Inicialize e aplique:
+   ```bash
    terraform init
-   ```
-4. ```bash
+   terraform plan
    terraform apply
    ```
-   Com `count = 0`, isso já cria a service account, o bucket de staging e
-   habilita as APIs — só não cria o Reasoning Engine ainda.
-5. Suba um `agent.pkl` e `requirements.txt` reais pro bucket criado (output
-   `staging_bucket_name`) — via Vertex AI SDK
-   (`client.agent_engines.create(...)`) ou qualquer pickle válido, só pra
-   testar o fluxo de infra.
-6. Volte no `main.tf`, troque `count = 0` para `count = 1`, e rode
-   `terraform apply` de novo.
-7. Se aplicou no projeto errado:
+4. Confira os outputs `reasoning_engine_name` (nome completo do recurso) e
+   `staging_bucket_name`.
+5. Opcionalmente, publique um agente no engine criado com o Vertex AI SDK
+   (`agent_engines.update`, informando `reasoning_engine_name`).
+6. Ao final do teste, remova os recursos:
    ```bash
    terraform destroy
    ```
 
-Se você já tem um bundle pronto (esteira de CI da aplicação já rodou pelo
-menos uma vez), pode já deixar `count = 1` desde o passo 4.
+## Variação: apenas o bucket
+
+Para criar somente a conta, o bucket e as APIs, sem o Reasoning Engine, inclua
+`create_reasoning_engine = false` no bloco do módulo. Nesse caso, o output
+`reasoning_engine_name` é `null`.

@@ -92,7 +92,7 @@ Os nomes das variáveis correspondem às leituras de ambiente do código no repo
 | `GOOGLE_CLOUD_PROJECT` | Projeto da stack |
 | `GOOGLE_CLOUD_LOCATION` | `us-central1` |
 | `SMTP_EMAIL` | Remetente do e-mail de contingência |
-| `REASONING_ENGINE_ID` | Nome do Reasoning Engine, definido apenas quando o módulo do Agent Engine está habilitado |
+| `REASONING_ENGINE_ID` | Nome completo do Reasoning Engine, definido na criação do serviço |
 | `SMTP_PASSWORD` | Lido do Secret Manager |
 
 **`hyper-agent-gatilho-scheduler`**
@@ -134,64 +134,56 @@ stack `app`. Ele não deve ser alterado nem reutilizado.
    smtp_password = "<senha de aplicativo>"
    ```
    O valor padrão declarado em `main.tf` é fictício.
-3. **Pacote do agente.** O Vertex AI valida e copia o pacote do agente
-   (`agent.pkl` e `requirements.txt`) do bucket de staging no momento da criação do
-   Reasoning Engine. Na primeira aplicação, um pacote provisório é publicado por
-   script; nas seguintes, o CI/CD do repositório `hyper-agent` publica a versão real
-   (ver [seção 8](#8-primeira-aplicação)).
+3. **Pacote do agente.** Não é necessário antes do `apply`: o Reasoning Engine é
+   criado vazio e o CI do repositório `hyper-agent` publica o agente depois (ver
+   [seção 8](#8-primeira-aplicação)).
 4. **Permissões** no projeto e acesso ao bucket de state.
 
 ## 8. Primeira aplicação
 
-Em um projeto em que o hyper-agent ainda não existe, a criação envolve duas
-dependências encadeadas:
+O módulo `agent_engine` é chamado sem `package_spec`. Nessa configuração, o Reasoning
+Engine é criado vazio no mesmo `apply` que cria o bucket de staging, sem depender de um
+pacote do agente no GCS. Como o Cloud Run de mensagens referencia o engine, o Terraform
+cria o engine primeiro, e o serviço já nasce com `REASONING_ENGINE_ID`. Isso é
+necessário porque o módulo `cloud-run` ignora alterações de variáveis de ambiente em
+serviços existentes.
 
-- o Reasoning Engine só pode ser criado quando já existe um pacote do agente no
-  bucket de staging, e esse bucket é criado pela própria stack;
-- o Cloud Run de mensagens recebe `REASONING_ENGINE_ID` apenas na sua criação, pois
-  o módulo `cloud-run` ignora alterações de variáveis de ambiente em serviços
-  existentes. Por isso, o Reasoning Engine precisa existir antes do Cloud Run de
-  mensagens.
+Em um projeto em que o hyper-agent ainda não existe:
 
-A sequência abaixo atende às duas condições sem alterar arquivos:
-
-1. **Bucket de staging.** Crie apenas o bucket (e as suas dependências):
+1. **Infraestrutura.** Execute:
    ```bash
    terraform init
-   terraform apply -target='module.agent_engine[0].google_storage_bucket.staging'
-   ```
-   Não copie o state de `samples/hyper-agent`, que pertence a outro projeto.
-2. **Pacote provisório do agente.** No repositório `hyper-agent`, autenticado neste
-   projeto, publique um pacote provisório no bucket:
-   ```bash
-   STAGING_BUCKET=gs://geapp-gentrop-prod-0001-agent-engine-staging python -m scripts.bootstrap_agent_engine_placeholder
-   ```
-3. **Demais recursos.** Execute o `apply` completo:
-   ```bash
    terraform plan
    terraform apply
    ```
-   Revise o `plan`: devem existir apenas operações de criação. O Reasoning Engine é
-   criado antes do Cloud Run de mensagens, que já nasce com `REASONING_ENGINE_ID`.
-4. **Credenciais do CI/CD.** Cadastre os outputs no repositório `hyper-agent` (ver
+   Revise o `plan`: devem existir apenas operações de criação. Não copie o state de
+   `samples/hyper-agent`, que pertence a outro projeto.
+2. **Credenciais do CI/CD.** Cadastre os outputs no repositório `hyper-agent` (ver
    [seção 9](#9-integração-com-o-cicd-do-hyper-agent)).
-5. **Versão real do agente.** A partir daí, cada push na `main` do `hyper-agent` que
-   altere os agentes publica a versão real por `agent_engines.update`, substituindo o
-   pacote provisório. O módulo ignora alterações na especificação do Reasoning
-   Engine, de modo que o `apply` não reverte a publicação.
+3. **Código do agente.** Cada push na `main` do `hyper-agent` que altere os agentes
+   publica o código no engine por `agent_engines.update`. O módulo ignora alterações
+   na especificação do Reasoning Engine, de modo que o `apply` não reverte a
+   publicação. O script `bootstrap_agent_engine_placeholder.py` do `hyper-agent` não é
+   necessário neste fluxo.
 
-O procedimento do `DEPLOY.md` do `hyper-agent` e o comentário do módulo `agent_engine`
-no `main.tf` sugerem `count = 0` na primeira etapa. Esse caminho não funciona em um
-projeto vazio: com `count = 0` no bloco do módulo, nem o bucket de staging é criado, e,
-quando o `count` volta a `1`, o Cloud Run de mensagens já existente não recebe
-`REASONING_ENGINE_ID`.
+Em um projeto em que o Reasoning Engine já existe, como o de produção, execute
+`terraform init` e `terraform plan`. O `main.tf` contém um bloco `moved` que renomeia o
+endereço `module.agent_engine[0]` para `module.agent_engine`, decorrente da remoção do
+`count`. O `plan` deve indicar apenas essa movimentação, sem criação, alteração ou
+exclusão de recursos. A remoção do `package_spec` não gera diferença, pois a
+especificação do engine é ignorada pelo módulo.
 
-Em um projeto em que o Reasoning Engine já existe, basta `terraform init` e
-`terraform plan`, que deve indicar **No changes**. Para confirmar que o Cloud Run de
-mensagens recebeu a variável:
+Para confirmar que o Cloud Run de mensagens possui a variável:
 
 ```bash
 gcloud run services describe hyper-agent-mensagens-chat --project=geapp-gentrop-prod-0001 --region=us-central1 --format="value(spec.template.spec.containers[0].env)"
+```
+
+Se `REASONING_ENGINE_ID` estiver ausente, defina-a manualmente:
+
+```bash
+gcloud run services update hyper-agent-mensagens-chat --project=geapp-gentrop-prod-0001 --region=us-central1 \
+  --update-env-vars="REASONING_ENGINE_ID=$(terraform output -raw reasoning_engine_name)"
 ```
 
 ## 9. Integração com o CI/CD do hyper-agent
@@ -205,7 +197,7 @@ repositório:
 | --- | --- | --- |
 | Secret | `WORKLOAD_IDENTITY_PROVIDER` | Output `workload_identity_provider` |
 | Secret | `DEPLOYER_SA_EMAIL` | Output `deployer_service_account_email` |
-| Secret | `REASONING_ENGINE_NAME` | Output `reasoning_engine_name` (após a etapa 3 da seção 8) |
+| Secret | `REASONING_ENGINE_NAME` | Output `reasoning_engine_name` |
 | Variable | `GCP_PROJECT_ID` | `geapp-gentrop-prod-0001` |
 | Variable | `GCP_REGION` | `us-central1` |
 | Variable | `ARTIFACT_REGISTRY_REPO` | `hyper-agent` |

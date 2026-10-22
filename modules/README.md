@@ -43,6 +43,51 @@ O `cloud-sql-postgress` também tem `services.tf` (APIs) e `permissions.tf` (GRA
 - Em `projects/`, pela tag:
   `source = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/cloud-run?ref=v1.0.0"`.
 
+## Casos de uso
+
+Exemplo com o Cloud Run, que o geapp usa em dois projetos: `module "app"` em
+[`projects/geapp/prod/app`](../projects/geapp/prod/app) e `module "mensagens_chat"` /
+`module "gatilho_scheduler"` em [`projects/geapp/prod/agent`](../projects/geapp/prod/agent).
+
+### Mudar o Cloud Run de um projeto só
+
+A mudança é um valor que o módulo já aceita (memória, CPU, env vars, papéis da SA...).
+Não mexa em `modules/`: altere só a chamada do módulo no `main.tf` do projeto.
+
+1. Abra `projects/<projeto>/<ambiente>/<stack>/main.tf`, por exemplo
+   `projects/geapp/prod/app/main.tf`.
+2. Mude o argumento no bloco do módulo:
+   ```hcl
+   module "app" {
+     source = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/cloud-run?ref=v1.0.0"
+     # ...
+     memory = "1Gi"
+   }
+   ```
+3. PR → merge → na pasta do projeto, `terraform plan` (só o serviço `app` deve mudar)
+   e `terraform apply`.
+
+O `agent` e qualquer outro projeto continuam como estavam.
+
+### Mudar o Cloud Run de vários projetos
+
+A mudança é no comportamento do módulo (um recurso novo, uma variável nova, um
+default diferente). Ela é feita uma vez em `modules/` e cada projeto escolhe quando
+recebe.
+
+1. Altere [`modules/cloud-run`](cloud-run) e teste em
+   [`samples/cloud-run`](../samples/cloud-run).
+2. PR → merge → crie a tag: `git tag v1.1.0 && git push origin v1.1.0`.
+3. Nos projetos que devem receber a mudança (ex.: `projects/geapp/prod/app/main.tf` e
+   `projects/geapp/prod/agent/main.tf`), troque `?ref=v1.0.0` por `?ref=v1.1.0` nos
+   blocos que usam `modules/cloud-run`.
+4. Em cada uma dessas pastas: `terraform init -upgrade`, `terraform plan` e
+   `terraform apply`.
+
+O projeto que continuar no `?ref=v1.0.0` não muda. As [`stacks/`](../stacks) do portal
+usam `../../modules` e recebem a mudança no próximo run, sem tag: por isso a regra
+abaixo, de deixar o comportamento antigo como default.
+
 ## Como mudar um módulo
 
 1. Edite o módulo e teste no sample correspondente em [`samples/`](../samples).

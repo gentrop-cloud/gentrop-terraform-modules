@@ -118,7 +118,7 @@ resource "google_secret_manager_secret_version" "values" {
     AGENT_PROJECT_ID         = local.project_id
     FIRESTORE_PROJECT_ID     = local.project_id
 
-    # Vem de outros examples (hyper-agent / github-actions-wif) ou do Agent Engine:
+    # Vem de outros samples (hyper-agent / github-actions-wif) ou do Agent Engine:
     # placeholders ficticios, troque pelos valores reais (nova versao da secret).
     HYPER_FIRESTORE_PROJECT_ID  = local.project_id
     HYPER_FIRESTORE_DATABASE_ID = "hyper-project-db-native"

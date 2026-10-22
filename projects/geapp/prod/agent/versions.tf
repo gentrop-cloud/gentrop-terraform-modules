@@ -4,7 +4,7 @@ terraform {
   # State remoto isolado por projeto/ambiente: o prefix e o que impede um
   # apply aqui de enxergar (e destruir) recursos de outro projeto/stack.
   backend "gcs" {
-    bucket = "gentrop-tfstate"                 # mesmo bucket de projetos/geapp/prod/app; prefix abaixo e proprio
+    bucket = "gentrop-tfstate"                 # mesmo bucket de projects/geapp/prod/app; prefix abaixo e proprio
     prefix = "clientes/geapp-prod-hyper-agent" # nome antigo da pasta; manter evita migrate-state
   }
 

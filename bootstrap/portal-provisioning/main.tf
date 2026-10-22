@@ -51,7 +51,7 @@ resource "google_project_service" "control" {
 }
 
 # Pool proprio: nao reaproveita o github-actions-pool / github-deployer do
-# examples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
+# samples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
 module "wif" {
   source = "../../modules/workload-identity"
 

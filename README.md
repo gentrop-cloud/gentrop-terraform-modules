@@ -1,20 +1,42 @@
 # gentrop-terraform-modules
 
-Módulos Terraform reutilizáveis pra provisionar projetos GCP (Cloud Run,
-Cloud SQL, Artifact Registry, Secret Manager, Workload Identity Federation).
+Repositório de infraestrutura da Gentrop no Google Cloud, em Terraform. Ele guarda:
+
+- os **módulos** reutilizáveis (Cloud Run, Cloud SQL, Artifact Registry, Secret
+  Manager, Workload Identity, Cloud Scheduler, Cloud Tasks, Firestore, BigQuery,
+  Vertex AI Agent Engine);
+- as **stacks** que o geapp-portal aplica para cada cliente;
+- os **projetos** aplicados à mão, fora do portal (ex.: geapp prod);
+- os **samples** usados para testar cada módulo isolado.
+
+Tudo é montado a partir de `modules/`: as outras pastas só combinam módulos e dizem
+em qual projeto GCP e em qual state eles rodam.
 
 ## Estrutura
 
 ```
-modules/                         # módulos reutilizáveis, versionados por tag vX.Y.Z
-examples/                        # bancada de teste dos módulos (source local, sem state remoto, sem CI)
-stacks/ + bootstrap/             # stacks genéricas aplicadas pelo geapp-portal (provision.yml)
-projetos/<projeto>/<ambiente>/<stack>/   # infra fora do portal, aplicada à mão: 1 pasta = 1 state
-  ex.: projetos/geapp/prod/app, projetos/geapp/prod/hyper-agent
+modules/                  # módulos reutilizáveis, versionados por tag vX.Y.Z (ver modules/README.md)
+samples/                  # bancada de teste dos módulos: source local, state local, sem CI
+stacks/                   # stacks genéricas aplicadas pelo geapp-portal, uma por cliente
+  project/                #   cria o projeto GCP do cliente e a SA tf-provisioner
+  gemini-enterprise/      #   app + hyper-agent + Cloud Build do cliente
+bootstrap/                # setup único do provisionamento via portal (WIF, SAs)
+projects/<projeto>/<ambiente>/<stack>/   # infra fora do portal, aplicada à mão
+  geapp/prod/app/         #   app geapp (Cloud Run + Cloud SQL + secrets)
+  geapp/prod/agent/       #   hyper-agent do geapp (Scheduler, Tasks, Firestore, BigQuery, Agent Engine)
+scripts/                  # apoio ao CI (envio de log ao portal)
+.github/workflows/        # provision.yml: run disparado pelo portal
 ```
 
-As stacks de `stacks/` usam `../../modules` (o portal sempre roda a `main`). As de
-`projetos/` usam o módulo por tag, não pelo caminho local:
+## Como a infra é aplicada
+
+| Onde | Quem aplica | Módulos | State |
+| --- | --- | --- | --- |
+| `stacks/` | geapp-portal → `provision.yml` (`workflow_dispatch`) | `../../modules`, sempre da `main` | `clientes/<client_slug>/<stack>` |
+| `projects/` | você, com `terraform plan` / `apply` na pasta | tag git (`?ref=vX.Y.Z`) | `prefix` no `versions.tf` da pasta |
+| `samples/` | você, para testar um módulo | `../../modules` | local (`terraform.tfstate`, ignorado pelo git) |
+
+Nos `projects/` o módulo vem por tag:
 
 ```hcl
 source = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/cloud-run?ref=v1.0.0"
@@ -24,55 +46,39 @@ Assim uma mudança em `modules/` só chega num projeto quando você sobe o `ref`
 
 ## Fluxo de manutenção
 
-- **Mudar só um projeto**: edite os `.tf` da pasta da stack → PR →
-  merge em `main` → na pasta, `terraform plan` e `terraform apply`.
-- **Mudar um módulo**: edite `modules/<m>` → teste em `examples/` → merge. Isso já
-  chega em `stacks/` no próximo run do portal, então mudança que recria ou atualiza
-  recurso existente entra atrás de variável com o default antigo. Para `projetos/`:
-  `git tag v1.1.0 && git push origin v1.1.0` → nas stacks que devem receber a mudança,
-  troque `?ref=v1.0.0` por `?ref=v1.1.0` e rode `terraform init -upgrade`. As outras
-  continuam na versão antiga.
-- **Novo projeto/ambiente em `projetos/`**: copie uma pasta de stack para
-  `projetos/<projeto>/<ambiente>/<stack>`, troque `project_id` e o `prefix` do backend
-  (nunca reaproveite um prefix).
+- **Mudar só um projeto**: edite os `.tf` da pasta em `projects/` → PR → merge em
+  `main` → na pasta, `terraform plan` e `terraform apply`.
+- **Mudar um módulo**: edite `modules/<m>` → teste em `samples/` → PR → merge. A
+  mudança já chega em `stacks/` no próximo run do portal; por isso, o que recria ou
+  altera recurso existente entra atrás de variável com o default antigo. Para
+  `projects/`, crie a tag (`git tag v1.1.0 && git push origin v1.1.0`) e, só nos
+  projetos que devem receber a mudança, troque `?ref=v1.0.0` por `?ref=v1.1.0` e rode
+  `terraform init -upgrade`.
+- **Novo projeto ou ambiente**: copie uma pasta para
+  `projects/<projeto>/<ambiente>/<stack>`, troque `project_id` e o `prefix` do backend
+  (nunca reaproveite um prefix, nem troque o `project_id` de uma pasta já aplicada).
+- **Novo cliente do portal**: não passa por aqui; o portal roda `stacks/project` e
+  depois as outras stacks. Setup inicial em
+  [`bootstrap/portal-provisioning`](bootstrap/portal-provisioning).
 
-## Módulos
+## Samples
 
-- [`artifact-registry`](modules/artifact-registry) — repositório Docker
-- [`secret-manager`](modules/secret-manager) — containers de secret (sem valor)
-- [`cloud-run`](modules/cloud-run) — serviço Cloud Run v2, com SA de runtime e
-  suporte a env vars/secrets, Cloud SQL e invocação autenticada via OIDC
-- [`cloud-sql-postgress`](modules/cloud-sql-postgress) — instância Postgres
-- [`workload-identity`](modules/workload-identity) — WIF pra GitHub Actions
-- [`cloud-scheduler-http`](modules/cloud-scheduler-http) — job HTTP agendado,
-  autenticado via OIDC
-- [`cloud-tasks-queue`](modules/cloud-tasks-queue) — fila de distribuição de
-  carga, com rate limiting/retry
-- [`firestore-database`](modules/firestore-database) — banco Firestore Native
-- [`bigquery-dataset`](modules/bigquery-dataset) — dataset + tabelas BigQuery
-- [`vertex-ai-agent-engine`](modules/vertex-ai-agent-engine) — SA, bucket de
-  staging e registro do Vertex AI Reasoning Engine
+Cada pasta é standalone: edite o `main.tf` com os dados do seu projeto GCP e rode
+`terraform init` + `terraform apply` direto, sem git/CI. Cada uma tem seu README.
 
-## Exemplos
-
-Cada pasta abaixo é standalone: edite o `main.tf` com os dados do seu projeto GCP e
-rode `terraform init` + `terraform apply` direto — sem precisar passar por git/CI.
-
-- [`artifact-registry-test`](examples/artifact-registry-test) — só o repositório
-- [`secret-manager-test`](examples/secret-manager-test) — só os secrets
-- [`cloud-run-test`](examples/cloud-run-test) — só o Cloud Run (imagem placeholder)
-- [`cloud-sql-test`](examples/cloud-sql-test) — só o Cloud SQL
-- [`github-actions-wif`](examples/github-actions-wif) — WIF pra GitHub Actions
-- [`firestore-database-test`](examples/firestore-database-test) — só o Firestore
-- [`bigquery-dataset-test`](examples/bigquery-dataset-test) — só o BigQuery
-- [`cloud-tasks-queue-test`](examples/cloud-tasks-queue-test) — só a fila de Cloud Tasks
-- [`cloud-scheduler-http-test`](examples/cloud-scheduler-http-test) — só o job de Cloud Scheduler
-- [`vertex-ai-agent-engine-test`](examples/vertex-ai-agent-engine-test) — só o Vertex AI Agent Engine
-- [`artifact-registry-secret-manager-cloud-run`](examples/artifact-registry-secret-manager-cloud-run) —
+- [`artifact-registry-test`](samples/artifact-registry-test) — só o repositório
+- [`secret-manager-test`](samples/secret-manager-test) — só os secrets
+- [`cloud-run-test`](samples/cloud-run-test) — só o Cloud Run (imagem placeholder)
+- [`cloud-sql-test`](samples/cloud-sql-test) — só o Cloud SQL
+- [`github-actions-wif`](samples/github-actions-wif) — WIF pra GitHub Actions
+- [`firestore-database-test`](samples/firestore-database-test) — só o Firestore
+- [`bigquery-dataset-test`](samples/bigquery-dataset-test) — só o BigQuery
+- [`cloud-tasks-queue-test`](samples/cloud-tasks-queue-test) — só a fila de Cloud Tasks
+- [`cloud-scheduler-http-test`](samples/cloud-scheduler-http-test) — só o job de Cloud Scheduler
+- [`vertex-ai-agent-engine-test`](samples/vertex-ai-agent-engine-test) — só o Vertex AI Agent Engine
+- [`artifact-registry-secret-manager-cloud-run`](samples/artifact-registry-secret-manager-cloud-run) —
   stack completa pós-criação do projeto (registry + secrets + Cloud SQL + Cloud Run
   já conectados entre si)
-- [`hyper-agent`](examples/hyper-agent) — Cloud Scheduler + Cloud Tasks +
+- [`hyper-agent`](samples/hyper-agent) — Cloud Scheduler + Cloud Tasks +
   2 Cloud Run + Firestore + BigQuery + Vertex AI Agent Engine, já conectados
   entre si
-
-Cada exemplo tem seu próprio README com o passo a passo.

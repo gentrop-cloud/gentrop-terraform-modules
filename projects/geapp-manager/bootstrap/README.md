@@ -1,10 +1,10 @@
-# Bootstrap do provisionamento via portal
+# Bootstrap do provisionamento via manager
 
 Duas contas, cada uma com uma responsabilidade:
 
 | Conta | Onde mora | O que faz |
 | --- | --- | --- |
-| `geapp-seed-sa` | só no `geapp-prod-seed-0001` | cria o projeto do cliente e, dentro dele, a `tf-provisioner` (`stacks/project`) |
+| `geapp-seed-sa` | só no `geapp-prod-seed-0001` | cria o projeto do cliente e, dentro dele, a `tf-provisioner` (`projects/geapp-manager/stacks/project`) |
 | `tf-provisioner` | uma em cada projeto de cliente | provisiona os serviços do próprio projeto (demais stacks) |
 
 O `provision.yml` escolhe a conta pelo stack: `project` roda como a
@@ -20,7 +20,7 @@ ao faturamento:
 - na **conta de faturamento** dos clientes: `roles/billing.user`.
 
 Os papéis da `tf-provisioner` não passam pelo admin: o stack `project` concede no
-próprio projeto (`tf_provisioner_roles` em `stacks/project/main.tf`).
+próprio projeto (`tf_provisioner_roles` em `projects/geapp-manager/stacks/project/main.tf`).
 
 ## 2. Estado atual: WIF no prod, `geapp-seed-sa` configurada à mão
 
@@ -51,7 +51,7 @@ Vars e secret do repositório:
 | `WIF_PROVIDER` | var | pool `github-terraform` do prod (sem mudança) |
 | `SEED_SA_EMAIL` | var | `geapp-seed-sa@geapp-prod-seed-0001.iam.gserviceaccount.com` |
 | `CLIENTS_FOLDER_ID` | var | id da pasta de clientes |
-| `CLOUDBUILD_GITHUB_TOKEN_SECRET`, `CLOUDBUILD_GITHUB_INSTALLATION_ID` | var | não são mais lidas (ADR 0010 do geapp-portal): apagar depois do release, junto com o secret do token |
+| `CLOUDBUILD_GITHUB_TOKEN_SECRET`, `CLOUDBUILD_GITHUB_INSTALLATION_ID` | var | não são mais lidas (ADR 0010 do geapp-manager): apagar depois do release, junto com o secret do token |
 | `TF_STATE_BUCKET`, `PORTAL_URL` | var | sem mudança |
 | `PORTAL_SA_EMAIL` | var | ainda não definida: o stack project não concede o Secret Manager ao portal |
 | `PROJECT_OWNERS` | var | quem ganha `roles/owner` em cada projeto novo, separado por vírgula (`user:...`, `group:...`) |
@@ -69,7 +69,7 @@ gh secret set CLIENTS_BILLING_ACCOUNT --repo gentrop-cloud/gentrop-terraform-mod
 
 ### Releases dos apps (aplicado à mão em 21/10/2026)
 
-As peças do bloco "Releases dos apps" do `main.tf` (ADR 0010 do geapp-portal) já
+As peças do bloco "Releases dos apps" do `main.tf` (ADR 0010 do geapp-manager) já
 existem no seed, criadas com os comandos abaixo. O apply deste root as importa:
 
 ```bash
@@ -106,7 +106,7 @@ também foi aplicada, com `gcloud storage buckets update --lifecycle-file`.
 
 ## Onboarding de um cliente novo
 
-Nada a fazer aqui: rode o stack `project` pelo portal antes dos outros.
+Nada a fazer aqui: rode o stack `project` pelo manager antes dos outros.
 
 ## 3. Próximo passo: mover o WIF para o seed (não aplicado)
 

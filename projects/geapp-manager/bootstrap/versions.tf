@@ -6,7 +6,7 @@ terraform {
   # proprio state nele em vez de num laptop.
   backend "gcs" {
     bucket = "gentrop-tfstate"
-    prefix = "bootstrap/portal-provisioning"
+    prefix = "bootstrap/portal-provisioning" # nome antigo da pasta; manter evita migrate-state
   }
 
   required_providers {

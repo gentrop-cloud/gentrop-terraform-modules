@@ -2,7 +2,7 @@
 
 Módulos Terraform reutilizáveis, um por serviço GCP. Cada um cria um recurso já
 configurado do jeito que a Gentrop usa (APIs ligadas, service account, IAM), para
-que `stacks/`, `projects/` e `samples/` só precisem passar os dados do projeto.
+que as stacks do manager, os `projects/` e os `samples/` só precisem passar os dados do projeto.
 
 Um módulo não tem backend nem `provider "google"`: quem chama decide o projeto e o
 state. A exceção é o `cloud-sql-postgress`, que configura o provider `postgresql` para
@@ -39,7 +39,7 @@ O `cloud-sql-postgress` também tem `services.tf` (APIs) e `permissions.tf` (GRA
 
 ## Como usar
 
-- Em `stacks/` e `samples/`, pelo caminho local: `source = "../../modules/cloud-run"`.
+- Nas stacks do manager e em `samples/`, pelo caminho local (ex.: `source = "../../modules/cloud-run"` num sample).
 - Em `projects/`, pela tag:
   `source = "git::https://github.com/gentrop-cloud/gentrop-terraform-modules.git//modules/cloud-run?ref=v1.0.0"`.
 
@@ -84,16 +84,16 @@ recebe.
 4. Em cada uma dessas pastas: `terraform init -upgrade`, `terraform plan` e
    `terraform apply`.
 
-O projeto que continuar no `?ref=v1.0.0` não muda. As [`stacks/`](../stacks) do portal
-usam `../../modules` e recebem a mudança no próximo run, sem tag: por isso a regra
+O projeto que continuar no `?ref=v1.0.0` não muda. As [stacks do manager](../projects/geapp-manager/stacks)
+usam o caminho local e recebem a mudança no próximo run, sem tag: por isso a regra
 abaixo, de deixar o comportamento antigo como default.
 
 ## Como mudar um módulo
 
 1. Edite o módulo e teste no sample correspondente em [`samples/`](../samples).
 2. Uma mudança que recria ou altera recurso existente entra atrás de variável com o
-   default antigo (ex.: `database_version` no `cloud-sql-postgress`). `stacks/` usa o
-   módulo da `main` direto, então sem isso todo cliente do portal recebe a mudança no
+   default antigo (ex.: `database_version` no `cloud-sql-postgress`). As stacks do manager usam o
+   módulo da `main` direto, então sem isso todo cliente do manager recebe a mudança no
    próximo run.
 3. Depois do merge, crie uma tag nova (`git tag v1.1.0 && git push origin v1.1.0`) e
    suba o `ref` só nos `projects/` que devem receber a mudança.

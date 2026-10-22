@@ -25,7 +25,7 @@ variable "clients_folder_id" {
 locals {
   repository = "gentrop-cloud/gentrop-terraform-modules"
 
-  # Apps publicados no bucket de releases (ADR 0010 do geapp-portal): chave = pasta
+  # Apps publicados no bucket de releases (ADR 0010 do geapp-manager): chave = pasta
   # no bucket e sufixo do topico release-<chave>.
   app_repositories = {
     "geapp"       = "gentrop-cloud/gemini-enteprise-adoption-portal"
@@ -53,7 +53,7 @@ resource "google_project_service" "control" {
 # Pool proprio: nao reaproveita o github-actions-pool / github-deployer do
 # samples/github-actions-wif, que serve ao deploy de apps e tem outros papeis.
 module "wif" {
-  source = "../../modules/workload-identity"
+  source = "../../../modules/workload-identity"
 
   project_id  = var.control_project_id
   pool_id     = "github-terraform"
@@ -121,14 +121,14 @@ output "cloudbuild_github_token_secret" {
   value       = google_secret_manager_secret.cloudbuild_github_token.id
 }
 
-# --- Releases dos apps (ADR 0010 do geapp-portal) ----------------------------
+# --- Releases dos apps (ADR 0010 do geapp-manager) ----------------------------
 # O publish-release.yml da main de cada app grava o pacote do commit no bucket e
 # avisa no topico do app; o trigger de Pub/Sub de cada cliente faz o deploy. Nenhum
 # projeto de cliente guarda credencial do GitHub.
 
 # Pool separado do github-terraform: a confianca nos apps nao alcanca a geapp-seed-sa.
 module "release_wif" {
-  source = "../../modules/workload-identity"
+  source = "../../../modules/workload-identity"
 
   project_id  = var.control_project_id
   pool_id     = "github-releases"

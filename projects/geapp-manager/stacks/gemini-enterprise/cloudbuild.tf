@@ -1,5 +1,5 @@
 # Deploy dos dois apps pelo Cloud Build do proprio cliente (ADRs 0009 e 0010 do
-# geapp-portal), ligado pela opcao enable_cloud_build do portal. Nenhuma conexao
+# geapp-manager), ligado pela opcao enable_cloud_build do manager. Nenhuma conexao
 # com o GitHub: o publish-release.yml da main de cada app grava o pacote do commit
 # no bucket de releases do seed e publica o sha no topico do app; o trigger de
 # Pub/Sub de cada app, aqui, busca o pacote e roda o cloudbuild.yaml dele. O
@@ -143,7 +143,7 @@ locals {
   cloud_build = var.enable_cloud_build
 
   # Formato do gcloud run deploy --set-secrets (ENV=SECRET:latest,...): so os
-  # nomes que o portal mandou, nunca valores (ADR 0005 do geapp-portal).
+  # nomes que o manager mandou, nunca valores (ADR 0005 do geapp-manager).
   app_secret_env  = join(",", [for k, v in var.secret_env_vars : "${k}=${v}:latest" if contains(local.app_secret_names, k)])
   chat_secret_env = join(",", [for k, v in var.secret_env_vars : "${k}=${v}:latest" if k == "SMTP_PASSWORD"])
 

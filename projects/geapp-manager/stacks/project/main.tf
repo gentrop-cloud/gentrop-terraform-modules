@@ -12,7 +12,7 @@ variable "project_id" {
 }
 
 variable "client_slug" {
-  description = "Slug do cliente no portal"
+  description = "Slug do cliente no manager"
   type        = string
 }
 
@@ -30,12 +30,12 @@ variable "folder_id" {
 variable "billing_account" {
   description = "Conta de faturamento dos clientes (TF_VAR via secret CLIENTS_BILLING_ACCOUNT do repo)"
   type        = string
-  # Confidencial: fora do plan e do log que vai ao portal. Fica so no state.
+  # Confidencial: fora do plan e do log que vai ao manager. Fica so no state.
   sensitive = true
 }
 
-# Enviadas pelo portal a todo stack; este nao usa. Declaradas para o Terraform
-# nao avisar de variavel nao declarada no portal.auto.tfvars.json.
+# Enviadas pelo manager a todo stack; este nao usa. Declaradas para o Terraform
+# nao avisar de variavel nao declarada no manager.auto.tfvars.json.
 variable "region" {
   type    = string
   default = "us-central1"
@@ -69,7 +69,7 @@ variable "project_owners" {
 }
 
 variable "release_topics" {
-  description = "Topicos de release dos apps no seed (bootstrap, ADR 0010 do geapp-portal), que os triggers do stack gemini-enterprise escutam"
+  description = "Topicos de release dos apps no seed (bootstrap, ADR 0010 do geapp-manager), que os triggers do stack gemini-enterprise escutam"
   type        = list(string)
   default = [
     "projects/geapp-prod-seed-0001/topics/release-geapp",
@@ -90,7 +90,7 @@ locals {
     "roles/resourcemanager.projectIamAdmin", # papeis das SAs de runtime
     "roles/run.admin",
     "roles/artifactregistry.admin",
-    "roles/secretmanager.viewer",     # o stack so referencia secrets que o portal criou
+    "roles/secretmanager.viewer",     # o stack so referencia secrets que o manager criou
     "roles/datastore.owner",          # hyper-agent: Firestore
     "roles/bigquery.admin",           # hyper-agent: dataset de auditoria
     "roles/cloudtasks.admin",         # hyper-agent
@@ -120,14 +120,14 @@ resource "google_project" "this" {
   billing_account = var.billing_account
   labels          = { client = var.client_slug }
 
-  # Segunda trava: o destroy pelo portal ja tira o projeto do state antes do plan
+  # Segunda trava: o destroy pelo manager ja tira o projeto do state antes do plan
   # (keep-on-destroy.txt). Isto barra um `terraform destroy` rodado a mao.
   deletion_policy = "PREVENT"
 }
 
 # A tf-provisioner usa o proprio projeto como projeto de cota: sem estas APIs,
 # o primeiro stack falha antes de conseguir habilitar as dele. Secret Manager
-# porque o portal grava os secrets antes do primeiro stack.
+# porque o manager grava os secrets antes do primeiro stack.
 resource "google_project_service" "base" {
   for_each = toset([
     "serviceusage.googleapis.com",

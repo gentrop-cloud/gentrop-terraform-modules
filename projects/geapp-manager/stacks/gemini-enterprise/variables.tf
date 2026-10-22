@@ -1,4 +1,4 @@
-# Stack unica aplicada pelo geapp-portal (provision.yml), um state por cliente
+# Stack unica aplicada pelo geapp-manager (provision.yml), um state por cliente
 # em clientes/<client_slug>/gemini-enterprise. Deixa o projeto do cliente pronto
 # para o deploy:
 #
@@ -10,10 +10,10 @@
 #
 # Os Cloud Run nascem com uma imagem provisoria e sem env vars. O deploy (Cloud
 # Build) aplica imagem e env vars, e o Terraform ignora as duas, entao Terraform
-# e deploy nao disputam a configuracao (ADR 0009 do geapp-portal).
+# e deploy nao disputam a configuracao (ADR 0009 do geapp-manager).
 #
 # Valores secretos (NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, PRIVATE_KEY,
-# CLIENT_EMAIL, SMTP_PASSWORD) nunca passam por aqui: o portal grava no Secret
+# CLIENT_EMAIL, SMTP_PASSWORD) nunca passam por aqui: o manager grava no Secret
 # Manager do cliente e manda so os nomes em secret_env_vars.
 
 variable "project_id" {
@@ -22,7 +22,7 @@ variable "project_id" {
 }
 
 variable "client_slug" {
-  description = "Slug do cliente no portal; nomeia o servico do app e a instancia do banco"
+  description = "Slug do cliente no manager; nomeia o servico do app e a instancia do banco"
   type        = string
 }
 
@@ -32,12 +32,12 @@ variable "region" {
 }
 
 variable "secret_env_vars" {
-  description = "Nome => id dos secrets que o portal gravou no Secret Manager do cliente"
+  description = "Nome => id dos secrets que o manager gravou no Secret Manager do cliente"
   type        = map(string)
   default     = {}
 }
 
-# --- opcoes do portal ---------------------------------------------------------
+# --- opcoes do manager ---------------------------------------------------------
 
 variable "google_client_id" {
   description = "Client ID da credencial OAuth do app GE deste cliente (vai como _GOOGLE_CLIENT_ID no deploy)"
@@ -48,7 +48,7 @@ variable "google_client_id" {
 # --- Cloud Build -----------------------------------------------------------------
 
 variable "enable_cloud_build" {
-  description = "Opcao \"Deploy pelo Cloud Build\" do portal: cria um trigger de Pub/Sub por app, e o provision.yml faz o primeiro deploy"
+  description = "Opcao \"Deploy pelo Cloud Build\" do manager: cria um trigger de Pub/Sub por app, e o provision.yml faz o primeiro deploy"
   type        = bool
   default     = false
 }

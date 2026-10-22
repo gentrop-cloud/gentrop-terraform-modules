@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Envia ao geapp-portal, a cada 2s, os bytes novos de um arquivo de log, ate
+# Envia ao geapp-manager, a cada 2s, os bytes novos de um arquivo de log, ate
 # existir "<log>.done". Cada lote leva um `seq` crescente: se um POST falha, o
-# mesmo lote e reenviado no proximo ciclo e o portal ignora duplicados.
+# mesmo lote e reenviado no proximo ciclo e o manager ignora duplicados.
 #
-# Uso: portal-log-stream.sh <arquivo-de-log>
+# Uso: log-stream.sh <arquivo-de-log>
 # Requer: PORTAL_URL, RUN_ID e o job com `permissions: id-token: write`.
 set -uo pipefail
 
 LOG="$1"
 CHUNK="$LOG.chunk"
-MAX_BYTES=200000 # abaixo do limite de 256 KiB por lote no portal
+MAX_BYTES=200000 # abaixo do limite de 256 KiB por lote no manager
 SEQ=0
 OFFSET=0
 
@@ -36,7 +36,7 @@ send_pending() {
       OFFSET=$((OFFSET + n))
       SEQ=$((SEQ + 1))
     else
-      return 0 # portal fora do ar: tenta de novo no proximo ciclo, sem perder linhas
+      return 0 # manager fora do ar: tenta de novo no proximo ciclo, sem perder linhas
     fi
   done
 }

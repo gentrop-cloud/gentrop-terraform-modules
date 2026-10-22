@@ -14,15 +14,15 @@ locals {
   # Usuario IAM do Cloud SQL para uma SA: o email sem ".gserviceaccount.com".
   app_db_user = trimsuffix(google_service_account.app.email, ".gserviceaccount.com")
 
-  # Secrets que o app le; o portal grava os valores e manda so os nomes.
+  # Secrets que o app le; o manager grava os valores e manda so os nomes.
   # PRIVATE_KEY/CLIENT_EMAIL: chave da SA de leitura do Firestore do GenGuide.
   app_secret_names = ["NEXTAUTH_SECRET", "GOOGLE_CLIENT_SECRET", "PRIVATE_KEY", "CLIENT_EMAIL"]
 }
 
 # Sem env vars: quem as aplica e o cloudbuild.yaml do app, no deploy (ADR 0009
-# do geapp-portal), e o modulo ignora env depois da criacao.
+# do geapp-manager), e o modulo ignora env depois da criacao.
 module "app_run" {
-  source     = "../../modules/cloud-run"
+  source     = "../../../../modules/cloud-run"
   project_id = var.project_id
   location   = var.region
 
@@ -48,7 +48,7 @@ check "app_secrets" {
 # sink abaixo cria a partir dos logs do Gemini Enterprise. O log de atividade
 # precisa estar ligado na configuracao do app no Gemini Enterprise.
 module "atividade_ge" {
-  source     = "../../modules/bigquery-dataset"
+  source     = "../../../../modules/bigquery-dataset"
   project_id = var.project_id
 
   dataset_id                 = "gemini_enterprise_atividade"
@@ -84,7 +84,7 @@ resource "google_project_service" "app" {
 }
 
 module "app_registry" {
-  source     = "../../modules/artifact-registry"
+  source     = "../../../../modules/artifact-registry"
   project_id = var.project_id
   location   = var.region
 
@@ -130,7 +130,7 @@ resource "random_password" "db_admin" {
 }
 
 module "db" {
-  source     = "../../modules/cloud-sql-postgress"
+  source     = "../../../../modules/cloud-sql-postgress"
   project_id = var.project_id
   region     = var.region
 
@@ -140,7 +140,7 @@ module "db" {
 
   iam_database_users     = [local.app_db_user]
   use_cloudsql_connector = true
-  deletion_protection    = false # o portal precisa conseguir destruir o cliente
+  deletion_protection    = false # o manager precisa conseguir destruir o cliente
 
   # Sem depends_on: o modulo declara o proprio provider postgresql, o que o
   # Terraform nao aceita junto com depends_on. Ele habilita o sqladmin sozinho.

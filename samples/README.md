@@ -3,12 +3,12 @@
 Bancada de teste dos módulos de [`modules/`](../modules). Cada pasta é uma
 configuração Terraform pequena e standalone, que chama um ou mais módulos pelo caminho
 local (`../../modules/<m>`) para ver o módulo funcionando de verdade num projeto GCP,
-antes de ele ir para `stacks/` ou para uma tag usada em `projects/`.
+antes de ele ir para as stacks do manager ou para uma tag usada em `projects/`.
 
 O que um sample **não** é: infra de produção. Ele não tem state remoto (o
 `terraform.tfstate` fica na pasta, ignorado pelo git), não roda no CI e pode ser
 destruído a qualquer momento. Infra que precisa ficar de pé vai para
-[`projects/`](../projects) ou para as [`stacks/`](../stacks) do portal.
+[`projects/`](../projects), incluindo as [stacks do manager](../projects/geapp-manager/stacks).
 
 ## Para que serve
 

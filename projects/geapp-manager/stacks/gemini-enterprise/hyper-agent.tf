@@ -48,20 +48,20 @@ resource "random_id" "datastore_suffix" {
 }
 
 module "firestore" {
-  source     = "../../modules/firestore-database"
+  source     = "../../../../modules/firestore-database"
   project_id = var.project_id
 
   database_id = local.firestore_database_id
   location_id = var.region
 
-  # Um destroy pelo portal apaga o banco de verdade (o default do provider so o
+  # Um destroy pelo manager apaga o banco de verdade (o default do provider so o
   # esquece no state, e o apply seguinte falhava com 409).
   delete_protection_state = "DELETE_PROTECTION_DISABLED"
   deletion_policy         = "DELETE"
 }
 
 module "auditoria" {
-  source     = "../../modules/bigquery-dataset"
+  source     = "../../../../modules/bigquery-dataset"
   project_id = var.project_id
 
   dataset_id = "hyper_agent_auditoria"
@@ -73,7 +73,7 @@ module "auditoria" {
 }
 
 module "agent_engine" {
-  source     = "../../modules/vertex-ai-agent-engine"
+  source     = "../../../../modules/vertex-ai-agent-engine"
   project_id = var.project_id
   region     = var.region
 
@@ -93,7 +93,7 @@ module "agent_engine" {
 # Cloud Run #2: webhook do Google Chat (publico; a app valida o bearer token do
 # Chat) e destino das tasks.
 module "mensagens_chat" {
-  source     = "../../modules/cloud-run"
+  source     = "../../../../modules/cloud-run"
   project_id = var.project_id
   location   = var.region
 
@@ -113,7 +113,7 @@ module "mensagens_chat" {
 
 # Cloud Tasks entrega 1 a 1 ao Cloud Run #2, com OIDC da SA do Cloud Run #1.
 module "fila_disparos" {
-  source     = "../../modules/cloud-tasks-queue"
+  source     = "../../../../modules/cloud-tasks-queue"
   project_id = var.project_id
   location   = var.region
 
@@ -128,7 +128,7 @@ module "fila_disparos" {
 
 # Cloud Run #1: chamado so pelo Cloud Scheduler, fechado.
 module "gatilho_scheduler" {
-  source     = "../../modules/cloud-run"
+  source     = "../../../../modules/cloud-run"
   project_id = var.project_id
   location   = var.region
 
@@ -151,7 +151,7 @@ module "gatilho_scheduler" {
 
 # O gatilho responde 400 sem {"tipo_gatilho": ...} em JSON.
 module "disparo_dicas" {
-  source     = "../../modules/cloud-scheduler-http"
+  source     = "../../../../modules/cloud-scheduler-http"
   project_id = var.project_id
   region     = var.region
 
@@ -165,7 +165,7 @@ module "disparo_dicas" {
 }
 
 module "disparo_verificacao" {
-  source     = "../../modules/cloud-scheduler-http"
+  source     = "../../../../modules/cloud-scheduler-http"
   project_id = var.project_id
   region     = var.region
 

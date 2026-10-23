@@ -72,7 +72,9 @@ resource "google_sql_database_instance" "manager" {
   deletion_protection = true
 
   settings {
-    tier = "db-f1-micro"
+    # O Postgres 17 nasce ENTERPRISE_PLUS por padrao, que nao aceita os tiers shared-core.
+    edition = "ENTERPRISE"
+    tier    = "db-f1-micro"
 
     # IP publico sem redes autorizadas: so entra pelo proxy/conector, com IAM.
     ip_configuration {

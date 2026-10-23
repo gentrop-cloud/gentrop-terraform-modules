@@ -38,7 +38,7 @@ gcloud billing accounts add-iam-policy-binding <billing_account> \
 ```bash
 gcloud auth application-default login
 terraform init
-terraform apply -var clients_folder_id=<dev_folder_id>
+terraform apply -var clients_folder_id=<dev_folder_id>   # sem a pasta ainda: terraform apply (reaplique com o id depois)
 ```
 
 ## 3. Hosting do manager (`../hosting`)

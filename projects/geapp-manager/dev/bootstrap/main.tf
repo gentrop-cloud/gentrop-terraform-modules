@@ -11,8 +11,9 @@ variable "service_account_email" {
 }
 
 variable "clients_folder_id" {
-  description = "Pasta de clientes de dev (a mesma da var CLIENTS_FOLDER_ID do environment dev): toda SA nela le os pacotes de release de dev"
+  description = "Pasta de clientes de dev (a mesma da var CLIENTS_FOLDER_ID do environment dev): toda SA nela le os pacotes de release de dev. Vazio ate o admin da org criar a pasta; reaplique com o id."
   type        = string
+  default     = ""
 }
 
 locals {
@@ -155,6 +156,8 @@ resource "google_storage_bucket_iam_member" "release_publisher" {
 # Uma permissao so para todos os clientes de dev: a cloud-build-deployer de cada
 # projeto na pasta de dev le os pacotes, sem passo por cliente.
 resource "google_storage_bucket_iam_member" "clients_read" {
+  count = var.clients_folder_id == "" ? 0 : 1
+
   bucket = google_storage_bucket.releases.name
   role   = "roles/storage.objectViewer"
   member = "principalSet://cloudresourcemanager.googleapis.com/folders/${var.clients_folder_id}/type/ServiceAccount"

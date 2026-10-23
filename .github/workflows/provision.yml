@@ -1,6 +1,10 @@
 # Disparado pelo geapp-manager (GitHub App, workflow_dispatch). Roda um stack de
-# projects/geapp-manager/prod/stacks/ para um cliente, com state em gs://$TF_STATE_BUCKET/clientes/<slug>/<stack>,
+# projects/geapp-manager/<ambiente>/stacks/ para um cliente, com state em gs://$TF_STATE_BUCKET/clientes/<slug>/<stack>,
 # e reporta log e resultado ao manager com o token OIDC deste run.
+#
+# Ambiente pela branch (ADR 0011 do geapp-manager): na main roda prod/ com o
+# GitHub Environment prod (vars do repo); na develop roda dev/ com o Environment dev,
+# cujas vars apontam para o geapp-dev-seed-0001. Cada Environment so aceita a sua branch.
 #
 # Runbook
 # - "Error acquiring the state lock": um run anterior morreu segurando o lock.
@@ -9,12 +13,14 @@
 # - O log nao aparece no portal e o run fica "Na fila": PORTAL_URL (var do repo)
 #   precisa ser a URL publica do manager, igual ao audience que ele espera.
 # - "PERMISSION_DENIED" no projeto do cliente: o projeto nao tem a tf-provisioner
-#   (rode antes o stack project) ou ela nao tem o papel (projects/geapp-manager/prod/stacks/project/main.tf).
+#   (rode antes o stack project) ou ela nao tem o papel (projects/geapp-manager/<ambiente>/stacks/project/main.tf).
+# - "Branch ... is not allowed to deploy to dev/prod": o run foi disparado de outra
+#   branch. O manager de prod usa PROVISION_REF=main; o de dev, PROVISION_REF=develop.
 # - "Primeiro deploy" falhou: o fim do log do build sai no log do run; o log
 #   inteiro fica no link do console impresso no inicio do step. Corrija o app
 #   (push na main ja redeploya) ou use "Tentar de novo" no manager.
 #
-# Vars do repositorio: WIF_PROVIDER, SEED_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
+# Vars (do repositorio em prod, do Environment dev em dev): WIF_PROVIDER, SEED_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
 # CLIENTS_FOLDER_ID, PORTAL_SA_EMAIL, PROJECT_OWNERS. Secret do repositorio:
 # CLIENTS_BILLING_ACCOUNT.
 name: provision
@@ -36,7 +42,7 @@ on:
         required: true
         type: string
       stack:
-        description: "Pasta em projects/geapp-manager/prod/stacks/"
+        description: "Pasta em projects/geapp-manager/<ambiente>/stacks/"
         required: true
         type: string
       action:
@@ -69,6 +75,7 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
     env:
       # Inputs entram so por env, nunca interpolados no script: evita injecao de comando.
       RUN_ID: ${{ inputs.run_id }}
@@ -80,6 +87,7 @@ jobs:
       PORTAL_URL: ${{ vars.PORTAL_URL }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_IN_AUTOMATION: "1"
+      ENV_DIR: projects/geapp-manager/${{ github.ref_name == 'main' && 'prod' || 'dev' }}
       # Constantes da org para o stack project (pasta e faturamento dos clientes).
       TF_VAR_folder_id: ${{ vars.CLIENTS_FOLDER_ID }}
       TF_VAR_wif_provider: ${{ vars.WIF_PROVIDER }}
@@ -93,10 +101,11 @@ jobs:
 
       - name: Validar inputs
         run: |
+          [[ "$GITHUB_REF_NAME" == main || "$GITHUB_REF_NAME" == develop ]] || { echo "rode da main (prod) ou da develop (dev)"; exit 1; }
           [[ "$RUN_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "run_id invalido"; exit 1; }
           [[ "$CLIENT_SLUG" =~ ^[a-z][a-z0-9-]{1,38}[a-z0-9]$ ]] || { echo "client_slug invalido"; exit 1; }
           [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || { echo "project_id invalido"; exit 1; }
-          [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "projects/geapp-manager/prod/stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
+          [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "$ENV_DIR/stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
           # O projeto do cliente e a tf-provisioner nunca sao apagados pelo pipeline.
           if [[ "$STACK" == project && "$ACTION" == destroy ]]; then
             echo "destroy do stack project nao e permitido: exclua o projeto no console"; exit 1
@@ -105,13 +114,13 @@ jobs:
           echo "$TFVARS_JSON" | jq -e --arg p "$PROJECT_ID" --arg s "$CLIENT_SLUG" \
             'type == "object" and .project_id == $p and .client_slug == $s' >/dev/null \
             || { echo "tfvars_json invalido ou divergente dos inputs"; exit 1; }
-          echo "$TFVARS_JSON" > "projects/geapp-manager/prod/stacks/$STACK/manager.auto.tfvars.json"
+          echo "$TFVARS_JSON" > "$ENV_DIR/stacks/$STACK/manager.auto.tfvars.json"
           echo "LOG=$RUNNER_TEMP/terraform.log" >> "$GITHUB_ENV"
           touch "$RUNNER_TEMP/terraform.log"
 
       - name: Iniciar envio de log ao manager
         run: |
-          nohup bash projects/geapp-manager/prod/scripts/log-stream.sh "$LOG" >/dev/null 2>&1 &
+          nohup bash "$ENV_DIR/scripts/log-stream.sh" "$LOG" >/dev/null 2>&1 &
           echo $! > "$LOG.pid"
 
       - uses: google-github-actions/auth@v2
@@ -126,14 +135,14 @@ jobs:
           terraform_wrapper: false # o wrapper polui a saida de `terraform output -json`
 
       - name: terraform init
-        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
+        working-directory: ${{ env.ENV_DIR }}/stacks/${{ inputs.stack }}
         run: |
           terraform init -input=false -no-color \
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="prefix=clientes/$CLIENT_SLUG/$STACK" 2>&1 | tee -a "$LOG"
 
       - name: terraform plan
-        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
+        working-directory: ${{ env.ENV_DIR }}/stacks/${{ inputs.stack }}
         run: |
           mode=""
           if [ "$ACTION" = destroy ]; then
@@ -150,7 +159,7 @@ jobs:
 
       - name: terraform apply
         if: inputs.action == 'apply' || inputs.action == 'destroy'
-        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
+        working-directory: ${{ env.ENV_DIR }}/stacks/${{ inputs.stack }}
         run: |
           # Falhas que o proprio GCP manda tentar de novo: nome de recurso apagado ha
           # pouco ("Please retry in N seconds"), API recem-ativada, regiao do Cloud Run

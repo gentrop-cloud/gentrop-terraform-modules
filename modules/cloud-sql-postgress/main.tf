@@ -3,7 +3,7 @@
 # 1. Instância Cloud SQL Postgres
 resource "google_sql_database_instance" "postgres" {
   name             = var.instance_name
-  database_version = "POSTGRES_15"
+  database_version = var.database_version
   region           = var.region
   project          = var.project_id
 

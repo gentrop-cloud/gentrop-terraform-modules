@@ -45,6 +45,12 @@ variable "authorized_networks" {
   default     = []
   description = "Lista de redes/IPs com permissão de acesso ao banco"
 }
+variable "database_version" {
+  type        = string
+  default     = "POSTGRES_15"
+  description = "Versao do Postgres (ex.: POSTGRES_18). Trocar numa instancia existente faz upgrade de versao maior."
+}
+
 variable "deletion_protection" {
   type        = bool
   default     = true

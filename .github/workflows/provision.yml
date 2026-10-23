@@ -1,18 +1,18 @@
-# Disparado pelo geapp-portal (GitHub App, workflow_dispatch). Roda um stack de
-# stacks/ para um cliente, com state em gs://$TF_STATE_BUCKET/clientes/<slug>/<stack>,
-# e reporta log e resultado ao portal com o token OIDC deste run.
+# Disparado pelo geapp-manager (GitHub App, workflow_dispatch). Roda um stack de
+# projects/geapp-manager/prod/stacks/ para um cliente, com state em gs://$TF_STATE_BUCKET/clientes/<slug>/<stack>,
+# e reporta log e resultado ao manager com o token OIDC deste run.
 #
 # Runbook
 # - "Error acquiring the state lock": um run anterior morreu segurando o lock.
 #   Confira que nenhum run do mesmo cliente/stack esta ativo e rode, na pasta do
 #   stack, com as mesmas -backend-config: terraform force-unlock <LOCK_ID>
 # - O log nao aparece no portal e o run fica "Na fila": PORTAL_URL (var do repo)
-#   precisa ser a URL publica do portal, igual ao audience que ele espera.
+#   precisa ser a URL publica do manager, igual ao audience que ele espera.
 # - "PERMISSION_DENIED" no projeto do cliente: o projeto nao tem a tf-provisioner
-#   (rode antes o stack project) ou ela nao tem o papel (stacks/project/main.tf).
+#   (rode antes o stack project) ou ela nao tem o papel (projects/geapp-manager/prod/stacks/project/main.tf).
 # - "Primeiro deploy" falhou: o fim do log do build sai no log do run; o log
 #   inteiro fica no link do console impresso no inicio do step. Corrija o app
-#   (push na main ja redeploya) ou use "Tentar de novo" no portal.
+#   (push na main ja redeploya) ou use "Tentar de novo" no manager.
 #
 # Vars do repositorio: WIF_PROVIDER, SEED_SA_EMAIL, TF_STATE_BUCKET, PORTAL_URL,
 # CLIENTS_FOLDER_ID, PORTAL_SA_EMAIL, PROJECT_OWNERS. Secret do repositorio:
@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: "ID do run no portal"
+        description: "ID do run no manager"
         required: true
         type: string
       client_slug:
@@ -36,7 +36,7 @@ on:
         required: true
         type: string
       stack:
-        description: "Pasta em stacks/"
+        description: "Pasta em projects/geapp-manager/prod/stacks/"
         required: true
         type: string
       action:
@@ -53,14 +53,14 @@ permissions:
   contents: read
   id-token: write
 
-# Um run por cliente/stack por vez; o seguinte espera (ADR 0004 do geapp-portal).
+# Um run por cliente/stack por vez; o seguinte espera (ADR 0004 do geapp-manager).
 concurrency:
   group: tf-${{ inputs.client_slug }}-${{ inputs.stack }}
   cancel-in-progress: false
 
 # Sem `shell: bash` explicito o GitHub roda `bash -e` SEM pipefail: um
 # `terraform apply | tee` que falha termina com o codigo do tee (0) e o run e
-# reportado ao portal como sucesso.
+# reportado ao manager como sucesso.
 defaults:
   run:
     shell: bash
@@ -96,22 +96,22 @@ jobs:
           [[ "$RUN_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "run_id invalido"; exit 1; }
           [[ "$CLIENT_SLUG" =~ ^[a-z][a-z0-9-]{1,38}[a-z0-9]$ ]] || { echo "client_slug invalido"; exit 1; }
           [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || { echo "project_id invalido"; exit 1; }
-          [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
+          [[ "$STACK" =~ ^[a-z0-9-]+$ && -d "projects/geapp-manager/prod/stacks/$STACK" ]] || { echo "stack desconhecido: $STACK"; exit 1; }
           # O projeto do cliente e a tf-provisioner nunca sao apagados pelo pipeline.
           if [[ "$STACK" == project && "$ACTION" == destroy ]]; then
             echo "destroy do stack project nao e permitido: exclua o projeto no console"; exit 1
           fi
-          # O portal manda project_id e client_slug tambem dentro do JSON: os dois tem que bater.
+          # O manager manda project_id e client_slug tambem dentro do JSON: os dois tem que bater.
           echo "$TFVARS_JSON" | jq -e --arg p "$PROJECT_ID" --arg s "$CLIENT_SLUG" \
             'type == "object" and .project_id == $p and .client_slug == $s' >/dev/null \
             || { echo "tfvars_json invalido ou divergente dos inputs"; exit 1; }
-          echo "$TFVARS_JSON" > "stacks/$STACK/portal.auto.tfvars.json"
+          echo "$TFVARS_JSON" > "projects/geapp-manager/prod/stacks/$STACK/manager.auto.tfvars.json"
           echo "LOG=$RUNNER_TEMP/terraform.log" >> "$GITHUB_ENV"
           touch "$RUNNER_TEMP/terraform.log"
 
-      - name: Iniciar envio de log ao portal
+      - name: Iniciar envio de log ao manager
         run: |
-          nohup bash scripts/portal-log-stream.sh "$LOG" >/dev/null 2>&1 &
+          nohup bash projects/geapp-manager/prod/scripts/log-stream.sh "$LOG" >/dev/null 2>&1 &
           echo $! > "$LOG.pid"
 
       - uses: google-github-actions/auth@v2
@@ -126,14 +126,14 @@ jobs:
           terraform_wrapper: false # o wrapper polui a saida de `terraform output -json`
 
       - name: terraform init
-        working-directory: stacks/${{ inputs.stack }}
+        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
         run: |
           terraform init -input=false -no-color \
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="prefix=clientes/$CLIENT_SLUG/$STACK" 2>&1 | tee -a "$LOG"
 
       - name: terraform plan
-        working-directory: stacks/${{ inputs.stack }}
+        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
         run: |
           mode=""
           if [ "$ACTION" = destroy ]; then
@@ -150,7 +150,7 @@ jobs:
 
       - name: terraform apply
         if: inputs.action == 'apply' || inputs.action == 'destroy'
-        working-directory: stacks/${{ inputs.stack }}
+        working-directory: projects/geapp-manager/prod/stacks/${{ inputs.stack }}
         run: |
           # Falhas que o proprio GCP manda tentar de novo: nome de recurso apagado ha
           # pouco ("Please retry in N seconds"), API recem-ativada, regiao do Cloud Run
@@ -173,11 +173,11 @@ jobs:
             terraform output -json > "$RUNNER_TEMP/outputs.json"
           fi
 
-      # Primeiro deploy (ADRs 0009 e 0010 do geapp-portal): submete a configuracao
+      # Primeiro deploy (ADRs 0009 e 0010 do geapp-manager): submete a configuracao
       # dos triggers de Pub/Sub que o stack criou, com _SHA vazio, que faz o build
       # usar o ultimo pacote da main. Nao usa `gcloud builds triggers run`: num
       # trigger de Pub/Sub sem repositorio ele responde 500. Um build que falha faz
-      # o run falhar; "Tentar de novo" no portal reaplica e submete de novo.
+      # o run falhar; "Tentar de novo" no manager reaplica e submete de novo.
       - name: Primeiro deploy (Cloud Build)
         if: inputs.action == 'apply'
         run: |
@@ -225,7 +225,7 @@ jobs:
           done
           exit "$failed"
 
-      - name: Reportar resultado ao portal
+      - name: Reportar resultado ao manager
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
@@ -245,7 +245,7 @@ jobs:
 
           token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$PORTAL_URL" | jq -r .value)
-          # O portal guarda so os outputs com sensitive=false.
+          # O manager guarda so os outputs com sensitive=false.
           jq -n --arg status "$status" --slurpfile outputs "$outputs" '{status: $status, outputs: $outputs[0]}' |
             curl -sSf --retry 5 --retry-all-errors -o /dev/null -X POST \
               -H "Authorization: Bearer $token" -H 'content-type: application/json' \

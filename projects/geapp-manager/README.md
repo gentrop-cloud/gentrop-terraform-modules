@@ -99,7 +99,7 @@ do cliente:
    informando o identificador da execução, o *slug* do cliente, o projeto GCP, a
    stack, a ação e as variáveis não secretas em JSON.
 4. **Execução.** O workflow valida os parâmetros, autentica no GCP por Workload
-   Identity Federation e executa o Terraform em `prod/stacks/<stack>`, com state em
+   Identity Federation e executa o Terraform em `<ambiente>/stacks/<stack>`, com state em
    `gs://<bucket>/clientes/<client_slug>/<stack>`.
 5. **Acompanhamento.** Durante a execução, o script
    [`prod/scripts/log-stream.sh`](prod/scripts/log-stream.sh) envia o log ao GeApp
@@ -116,6 +116,11 @@ e a conta `tf-provisioner`) e, em seguida, stack `gemini-enterprise`.
 ```
 projects/geapp-manager/
 ├── README.md                     # Este documento
+├── dev/                          # Ambiente de desenvolvimento (geapp-dev-seed-0001), mesma estrutura
+│   ├── bootstrap/                #   + bucket de state próprio; README com o passo a passo do dev
+│   ├── hosting/                  #   Cloud Run, Cloud SQL e WIF de deploy do manager de dev
+│   ├── scripts/
+│   └── stacks/                   #   cópia de prod/stacks com o seed de dev
 └── prod/                         # Ambiente de produção
     ├── bootstrap/                # Setup único do projeto de controle (aplicação manual)
     │   ├── main.tf
@@ -128,8 +133,16 @@ projects/geapp-manager/
         └── gemini-enterprise/    # Aplicações e serviços do cliente
 ```
 
-O `provision.yml` aceita exclusivamente diretórios de `prod/stacks/`. Assim, o GeApp
+O `provision.yml` aceita exclusivamente diretórios de `<ambiente>/stacks/`. Assim, o GeApp
 Manager não tem meios de acionar o bootstrap ou executar scripts arbitrários.
+
+O ambiente é escolhido pela branch em que o `provision.yml` roda (ADR 0011 do GeApp
+Manager): a `main` usa `prod/` e o GitHub Environment `prod`; a `develop` usa `dev/`
+e o Environment `dev`, cujas variáveis apontam para o `geapp-dev-seed-0001`. Cada
+Environment só aceita a sua branch, e o Workload Identity de cada seed só aceita a
+branch do seu ambiente. Uma mudança de stack é feita e testada em `dev/` na
+`develop` e levada a `prod/` na PR para a `main`. Procedimento do dev:
+[`dev/bootstrap/README.md`](dev/bootstrap/README.md).
 
 ## 6. Stacks
 
@@ -278,7 +291,8 @@ diretamente nos comandos, para evitar injeção de comandos.
 
 ## 10. Configuração no GitHub
 
-O `provision.yml` depende das seguintes configurações do repositório:
+O `provision.yml` depende das seguintes configurações. Em prod, vêm do repositório
+(o Environment `prod` não tem valores próprios); em dev, do Environment `dev`:
 
 | Tipo | Nome | Conteúdo |
 | --- | --- | --- |
@@ -355,7 +369,7 @@ sempre com `terraform plan` revisado antes do `apply`.
   branch `main` daquele repositório estão publicados os ADRs 0001 a 0006; os de
   número superior (por exemplo, 0009 e 0010) encontram-se em branches ainda não
   mescladas.
-- **Execução de testes.** O pipeline é executado a partir da branch `main`; por isso,
-  alterações nas stacks só podem ser exercitadas por ele após o merge.
+- **Execução de testes.** Alterações nas stacks são exercitadas pelo manager de dev,
+  a partir da branch `develop`, antes do merge na `main` (seção 5).
 - **Bootstrap pendente.** Enquanto a versão atual do bootstrap não for aplicada, a
   configuração em uso é a descrita na [seção 7.2](#72-situação-atual).

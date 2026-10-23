@@ -1,0 +1,5 @@
+# Enderecos que um destroy so remove do state, sem apagar no GCP: sao do
+# projeto do cliente, nao deste stack (ex.: o papel do service agent do Cloud
+# Run, que outros servicos do projeto tambem usam). Lido pelo provision.yml.
+google_project_iam_member.run_service_agent
+google_project_service_identity.run
